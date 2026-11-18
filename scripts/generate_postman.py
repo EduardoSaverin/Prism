@@ -1,8 +1,8 @@
-"""Generate a Postman collection (v2.1) from Prism's OpenAPI schema.
+"""Generate a Postman collection (v2.1) and environments from Prism's OpenAPI schema.
 
 Usage:
-    uv run python scripts/generate_postman.py            # write the collection
-    uv run python scripts/generate_postman.py --check    # fail if it is out of date
+    uv run python scripts/generate_postman.py            # write the files
+    uv run python scripts/generate_postman.py --check    # fail if any file is out of date
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import json
 import re
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,13 +20,32 @@ from prism import __version__
 from prism.main import create_app
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT = ROOT / "docs" / "postman" / "prism.postman_collection.json"
+DEFAULT_OUT_DIR = ROOT / "docs" / "postman"
+COLLECTION_FILE = "prism.postman_collection.json"
 SCHEMA_URL = "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 NAMESPACE = uuid.UUID("6f1c2a52-3d9e-4c8b-9a51-0b7f6d2e4a10")
 HTTP_METHODS = ("get", "post", "put", "patch", "delete", "head", "options")
 DEFAULT_FOLDER = "General"
 
 JSONDict = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Variable:
+    key: str
+    default: str
+    description: str
+    secret: bool = False
+
+
+VARIABLES = (
+    Variable("baseUrl", "http://127.0.0.1:8000", "Address of the Prism gateway"),
+    Variable("virtualKey", "", "Prism virtual key sent as the bearer token", secret=True),
+)
+
+ENVIRONMENTS: dict[str, dict[str, str]] = {
+    "Local": {},
+}
 
 
 def _stable_id(*parts: str) -> str:
@@ -191,10 +211,32 @@ def build_collection(spec: JSONDict) -> JSONDict:
             "bearer": [{"key": "token", "value": "{{virtualKey}}", "type": "string"}],
         },
         "variable": [
-            {"key": "baseUrl", "value": "http://127.0.0.1:8000", "type": "string"},
-            {"key": "virtualKey", "value": "", "type": "string"},
+            {"key": v.key, "value": v.default, "type": "string", "description": v.description}
+            for v in VARIABLES
         ],
     }
+
+
+def build_environment(name: str, overrides: dict[str, str]) -> JSONDict:
+    return {
+        "id": _stable_id("environment", name),
+        "name": f"Prism ({name})",
+        "values": [
+            {
+                "key": v.key,
+                "value": overrides.get(v.key, v.default),
+                "type": "secret" if v.secret else "default",
+                "enabled": True,
+            }
+            for v in VARIABLES
+        ],
+        "_postman_variable_scope": "environment",
+    }
+
+
+def _environment_file(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return f"prism-{slug}.postman_environment.json"
 
 
 def _display(path: Path) -> str:
@@ -204,34 +246,48 @@ def _display(path: Path) -> str:
         return str(path)
 
 
-def render() -> str:
-    return json.dumps(build_collection(create_app().openapi()), indent=2) + "\n"
+def _to_json(data: JSONDict) -> str:
+    return json.dumps(data, indent=2) + "\n"
+
+
+def render() -> dict[str, str]:
+    files = {COLLECTION_FILE: _to_json(build_collection(create_app().openapi()))}
+    for name, overrides in ENVIRONMENTS.items():
+        files[_environment_file(name)] = _to_json(build_environment(name, overrides))
+    return files
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument(
-        "--check", action="store_true", help="exit with 1 if the file is missing or out of date"
+        "--check", action="store_true", help="exit with 1 if any file is missing or out of date"
     )
     args = parser.parse_args(argv)
-    content = render()
-    output: Path = args.output
+    out_dir: Path = args.out_dir
+    files = {out_dir / name: content for name, content in render().items()}
 
     if args.check:
-        if not output.exists() or output.read_text(encoding="utf-8") != content:
+        stale = [
+            path
+            for path, content in files.items()
+            if not path.exists() or path.read_text(encoding="utf-8") != content
+        ]
+        if stale:
+            listing = "\n".join(f"  {_display(path)}" for path in stale)
             print(
-                f"Postman collection is out of date: {_display(output)}\n"
+                f"Postman files are out of date:\n{listing}\n"
                 "Run `make postman` and commit the result.",
                 file=sys.stderr,
             )
             return 1
-        print("Postman collection is up to date.")
+        print("Postman collection and environments are up to date.")
         return 0
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(content, encoding="utf-8")
-    print(f"Wrote {_display(output)}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for path, content in files.items():
+        path.write_text(content, encoding="utf-8")
+        print(f"Wrote {_display(path)}")
     return 0
 
 

@@ -205,9 +205,29 @@ To skip a hook once, add `--no-verify` to `git commit` or `git push`.
 
 ### Postman collection
 
-[`docs/postman/prism.postman_collection.json`](docs/postman/prism.postman_collection.json) is generated from the app's OpenAPI schema. Import it into Postman and set the `baseUrl` and `virtualKey` collection variables.
+`make postman` generates these files in [`docs/postman/`](docs/postman/) from the app's OpenAPI schema:
 
-After changing an endpoint, run `make postman` and commit the result. The pre-push hook and CI fail if the collection is out of date.
+| File | Contents |
+| --- | --- |
+| `prism.postman_collection.json` | Every endpoint, grouped by tag, with example request bodies |
+| `prism-local.postman_environment.json` | The **Prism (Local)** environment |
+
+To use them:
+
+1. In Postman, choose **Import** and select both files.
+2. Select the **Prism (Local)** environment in the top-right corner.
+3. Set `virtualKey` to your Prism virtual key. It's stored as a secret, so Postman masks it.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `baseUrl` | `http://127.0.0.1:8000` | Address of the gateway |
+| `virtualKey` | empty | Bearer token sent with authenticated requests |
+
+Don't put your key into the files before committing them. Set it only in Postman.
+
+To add another environment, such as staging, add an entry to `ENVIRONMENTS` in [`scripts/generate_postman.py`](scripts/generate_postman.py) and run `make postman`.
+
+After changing an endpoint, run `make postman` and commit the result. The pre-push hook and CI fail if any of these files are out of date.
 
 ### Adding a provider adapter
 

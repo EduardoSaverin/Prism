@@ -71,12 +71,14 @@
     {
       "key": "baseUrl",
       "value": "http://127.0.0.1:8000",
-      "type": "string"
+      "type": "string",
+      "description": "Address of the Prism gateway"
     },
     {
       "key": "virtualKey",
       "value": "",
-      "type": "string"
+      "type": "string",
+      "description": "Prism virtual key sent as the bearer token"
     }
   ]
 }
