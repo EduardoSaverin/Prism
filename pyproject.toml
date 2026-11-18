@@ -3,6 +3,8 @@ name = "prism-gateway"
 dynamic = ["version"]
 description = "Prism: an OpenAI-compatible AI gateway with routing, failover, caching, governance and tracing."
 readme = "README.md"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",

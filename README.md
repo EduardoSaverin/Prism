@@ -271,6 +271,12 @@ Contributions are welcome. Before opening a pull request:
 2. Make sure `make check` passes.
 3. For a design change, add or update an ADR in `docs/adr/`.
 
+Prism is also offered under a commercial license, so contributors will be asked to sign a Contributor License Agreement (CLA). The CLA is still being prepared, so please open an issue before starting work on a pull request.
+
 ## License
 
-The license has not been chosen yet; Apache-2.0 and MIT are under consideration. Until a `LICENSE` file is added, all rights are reserved.
+Prism is licensed under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`).
+
+You can use, modify and self-host Prism, including inside a company. If you modify Prism and let others use it over a network, for example as a hosted service, you must make your modified source code available to those users under the same license.
+
+**Commercial license:** a separate commercial license is available for organisations that cannot meet the AGPL's terms, for example to offer Prism as part of a proprietary or hosted product. Open an issue to get in touch.
