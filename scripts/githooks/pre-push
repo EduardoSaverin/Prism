@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Pre-push hook: the full check suite, the same gate CI enforces.
+#
+#   1. Lint and format check (ruff)
+#   2. Type check (pyright)
+#   3. Tests with the coverage threshold (pytest)
+#   4. Postman collection is in sync with the API
+#
+# Skip once with: git push --no-verify
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+red=$'\033[31m'
+green=$'\033[32m'
+bold=$'\033[1m'
+reset=$'\033[0m'
+if [[ ! -t 1 ]]; then red="" green="" bold="" reset=""; fi
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "${red}${bold}pre-push:${reset} uv is not installed. See https://docs.astral.sh/uv/" >&2
+    exit 1
+fi
+
+run_step() {
+    local name="$1"
+    shift
+    echo "${bold}pre-push:${reset} ${name}"
+    if ! "$@"; then
+        echo "${red}${bold}pre-push:${reset} ${name} failed. Push aborted." >&2
+        exit 1
+    fi
+}
+
+run_step "lint" uv run --quiet ruff check .
+run_step "format" uv run --quiet ruff format --check .
+run_step "type check" uv run --quiet pyright
+run_step "tests" uv run --quiet pytest -q
+run_step "postman collection" uv run --quiet python scripts/generate_postman.py --check
+
+echo "${green}pre-push:${reset} all checks passed."

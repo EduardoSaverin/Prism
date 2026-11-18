@@ -1,0 +1,82 @@
+{
+  "info": {
+    "_postman_id": "6d4e660a-b220-5560-b7d3-c8a41b7fb3e9",
+    "name": "Prism",
+    "description": "Generated from the Prism 0.1.0 OpenAPI schema. Do not edit by hand: run `make postman`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "id": "497089d4-8a6f-5cae-9c14-d18b0f84aa01",
+      "name": "Health",
+      "item": [
+        {
+          "id": "473a9e29-8d35-57d0-be7f-80ec52cd92a9",
+          "name": "Liveness check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "0424a6e6-08d3-54db-853a-68457be1dbf9",
+          "name": "Readiness check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/readyz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "readyz"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{virtualKey}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "virtualKey",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

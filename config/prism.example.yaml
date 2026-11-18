@@ -1,0 +1,38 @@
+# Example Prism config. Copy it to config/prism.yaml and edit.
+# Keys are never written here. Each "env" names an environment variable.
+
+providers:
+  - id: groq
+    kind: groq
+    keys:
+      - env: GROQ_KEY_1
+        weight: 2
+      - env: GROQ_KEY_2
+        weight: 1
+
+  - id: gemini
+    kind: gemini
+    keys:
+      - env: GEMINI_KEY_1
+
+  - id: local-ollama
+    kind: ollama
+    base_url: http://localhost:11434
+
+routes:
+  # Callers use the route name as the model name, for example model="fast-chat".
+  - name: fast-chat
+    policy: priority
+    targets:
+      - provider: groq
+        model: <model-id>
+      - provider: gemini
+        model: <model-id>
+      - provider: local-ollama
+        model: <model-id>
+    retry:
+      max_retries: 2
+      backoff_ms: 200
+    cache:
+      exact: true
+      ttl_s: 300

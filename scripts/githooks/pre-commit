@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: fast checks on the files being committed.
+#
+#   1. Refuses to commit secrets (.env files, private keys).
+#   2. Runs ruff lint and format checks on staged Python files.
+#
+# Skip once with: git commit --no-verify
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+red=$'\033[31m'
+green=$'\033[32m'
+bold=$'\033[1m'
+reset=$'\033[0m'
+if [[ ! -t 1 ]]; then red="" green="" bold="" reset=""; fi
+
+fail() {
+    echo "${red}${bold}pre-commit:${reset} $1" >&2
+    exit 1
+}
+
+if ! command -v uv >/dev/null 2>&1; then
+    fail "uv is not installed. See https://docs.astral.sh/uv/"
+fi
+
+staged=()
+while IFS= read -r -d '' file; do
+    staged+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [[ ${#staged[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+secret_files=()
+for file in "${staged[@]}"; do
+    case "$(basename "$file")" in
+        .env.example | .env.sample | .env.template) ;;
+        .env | .env.* | *.pem | *.key | id_rsa | id_ed25519)
+            secret_files+=("$file")
+            ;;
+    esac
+done
+if [[ ${#secret_files[@]} -gt 0 ]]; then
+    fail "refusing to commit files that may hold secrets:$(printf '\n  %s' "${secret_files[@]}")"
+fi
+
+if git diff --cached -U0 --diff-filter=ACMR -- "${staged[@]}" \
+    | grep -E '^\+' \
+    | grep -qE -- '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----'; then
+    fail "a staged change contains a private key."
+fi
+
+python_files=()
+for file in "${staged[@]}"; do
+    if [[ "$file" == *.py ]]; then
+        python_files+=("$file")
+    fi
+done
+
+if [[ ${#python_files[@]} -eq 0 ]]; then
+    echo "${green}pre-commit:${reset} no Python files staged."
+    exit 0
+fi
+
+echo "pre-commit: checking ${#python_files[@]} Python file(s) with ruff"
+
+if ! uv run --quiet ruff check -- "${python_files[@]}"; then
+    fail "lint errors found. Fix them, or run \`make format\` to auto-fix, then stage again."
+fi
+
+if ! uv run --quiet ruff format --check -- "${python_files[@]}"; then
+    fail "files are not formatted. Run \`make format\`, then stage the changes again."
+fi
+
+echo "${green}pre-commit:${reset} all checks passed."

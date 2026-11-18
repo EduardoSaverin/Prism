@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Local state and secrets
+.env
+*.db
+*.sqlite3
+config/prism.yaml
+
+# Editors
+.idea/
+.vscode/
+.DS_Store

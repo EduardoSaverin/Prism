@@ -1,0 +1,1363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prism: Product Requirements Document</title>
+<meta name="description" content="Product requirements for Prism, an OpenAI-compatible AI gateway.">
+<style>
+:root{
+  --ink:#18212f; --muted:#5a6676; --line:#dfe5ee; --bg:#eef1f7; --paper:#ffffff;
+  --blue:#2563eb; --blue-d:#1d4ed8; --blue-t:#e8f0fe;
+  --indigo:#5b4fd6; --indigo-d:#4338b5; --indigo-t:#edebfc;
+  --green:#178a56; --green-d:#0f6a41; --green-t:#e1f3ea;
+  --orange:#d9601f; --orange-d:#a8470f; --orange-t:#fdede1;
+  --rose:#c43069; --rose-d:#9b2250; --rose-t:#fce6ee;
+  --accent:var(--blue); --accent-d:var(--blue-d); --accent-t:var(--blue-t);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace;
+}
+.g-blue{--accent:var(--blue);--accent-d:var(--blue-d);--accent-t:var(--blue-t)}
+.g-indigo{--accent:var(--indigo);--accent-d:var(--indigo-d);--accent-t:var(--indigo-t)}
+.g-green{--accent:var(--green);--accent-d:var(--green-d);--accent-t:var(--green-t)}
+.g-orange{--accent:var(--orange);--accent-d:var(--orange-d);--accent-t:var(--orange-t)}
+.g-rose{--accent:var(--rose);--accent-d:var(--rose-d);--accent-t:var(--rose-t)}
+.c-blue{background:var(--blue)}.c-indigo{background:var(--indigo)}.c-green{background:var(--green)}
+.c-orange{background:var(--orange)}.c-rose{background:var(--rose)}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.65 Inter,"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--blue-d)}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:4px}
+
+.layout{display:grid;grid-template-columns:268px minmax(0,1fr);max-width:1260px;margin:0 auto}
+nav.side{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:28px 18px 28px 28px}
+.brand strong{display:block;font-size:22px;letter-spacing:-.01em}
+.brand span{font-size:13px;color:var(--muted)}
+.legend{list-style:none;margin:18px 0 14px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted)}
+.legend li{display:flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.toc{list-style:none;margin:0;padding:0}
+.toc a{display:flex;align-items:baseline;gap:8px;padding:6px 10px;border-radius:8px;color:var(--ink);
+  text-decoration:none;font-size:14px;line-height:1.35}
+.toc a:hover{background:#fff}
+.toc a.active{background:var(--accent-t);color:var(--accent-d);font-weight:600}
+.toc .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:0 0 8px;align-self:center}
+.toc .n{min-width:1.3em;color:var(--muted);font-variant-numeric:tabular-nums}
+
+main{padding:28px 36px 80px 16px;min-width:0}
+.sheet{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:40px 48px 56px;max-width:900px}
+
+.hero{padding-bottom:8px}
+.spectrum{display:flex;height:8px;border-radius:99px;overflow:hidden;margin-bottom:26px}
+.spectrum i{flex:1}
+.hero h1{font-size:60px;line-height:1;margin:0 0 6px;font-weight:800;letter-spacing:-.03em}
+.subtitle{margin:0 0 22px;font-size:20px;color:var(--muted);font-weight:500}
+.lead{font-size:19px;line-height:1.55;max-width:38em;margin:0 0 20px}
+.meta{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.meta li{background:var(--blue-t);color:var(--blue-d);font-size:13.5px;font-weight:600;padding:4px 12px;border-radius:99px}
+
+.sec{margin-top:52px;scroll-margin-top:20px}
+.sec-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid var(--accent-t)}
+.sec-head h2{margin:0;font-size:27px;line-height:1.2;letter-spacing:-.015em}
+.num{flex:0 0 36px;height:36px;border-radius:9px;background:var(--accent);color:#fff;font-weight:700;font-size:16px;
+  display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.num.dot{flex:0 0 14px;height:14px;width:14px;border-radius:50%;margin:0 8px 0 11px}
+.sec h3{font-size:18px;margin:30px 0 8px;padding-left:12px;border-left:4px solid var(--accent);line-height:1.3}
+.sec p{max-width:44em;margin:10px 0}
+.sec ul,.sec ol{max-width:44em;padding-left:22px}
+.sec li{margin:5px 0}
+.sec li::marker{color:var(--accent);font-weight:700}
+
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:16px 0 20px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:14.5px;line-height:1.5}
+th{background:var(--accent-t);color:var(--accent-d);text-align:left;font-weight:700;padding:10px 14px;white-space:nowrap}
+td{padding:10px 14px;border-top:1px solid var(--line);vertical-align:top}
+tbody tr:nth-child(even) td{background:#fafbfd}
+td:first-child{font-weight:600}
+code{font-family:var(--mono);font-size:.88em;background:#eef1f8;border-radius:4px;padding:1px 6px}
+.chip{display:inline-block;padding:2px 11px;border-radius:99px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.chip.v1{background:#e3edff;color:#1d4ed8}
+.chip.v2{background:#fdeadb;color:#a8470f}
+.chip.high{background:#fde4e1;color:#a52a1e}
+.chip.medium{background:#fff0c9;color:#8a5a00}
+.chip.low{background:#dcf3e5;color:#0f6a41}
+
+.callout{background:var(--accent-t);border-left:4px solid var(--accent);border-radius:0 10px 10px 0;padding:6px 20px;margin:18px 0}
+.callout p{font-weight:600;margin:10px 0 0}
+ul.tasks{list-style:none;padding-left:0}
+li.task{display:flex;gap:12px;align-items:flex-start;margin:11px 0}
+li.task::before{content:"";flex:0 0 18px;height:18px;margin-top:4px;border:2px solid var(--accent);border-radius:5px}
+
+.codehilite{background:#f3f5fb;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;margin:16px 0}
+.codehilite pre{margin:0;font:13px/1.55 var(--mono)}
+.codehilite code{background:none;padding:0;font-size:inherit}
+
+figure.diagram{margin:24px 0}
+figure.diagram svg{width:100%;height:auto;display:block;background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px}
+figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);max-width:44em}
+
+@media (max-width:980px){
+  .layout{grid-template-columns:1fr}
+  nav.side{position:static;height:auto;padding:20px 20px 4px}
+  .toc{display:none}
+  main{padding:12px}
+  .sheet{padding:26px 20px 40px}
+  .hero h1{font-size:46px}
+}
+@media print{
+  body{background:#fff;font-size:11.5pt}
+  .layout{display:block;max-width:none}
+  nav.side{display:none}
+  main{padding:0}
+  .sheet{border:0;border-radius:0;padding:0;max-width:none}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .sec{margin-top:30px}
+  h2,h3{break-after:avoid}
+  .sec-head{break-inside:avoid;break-after:avoid}
+  tr,figure,.codehilite,.callout{break-inside:avoid}
+  thead{display:table-header-group}
+  .table-wrap{overflow:visible}
+  .hero h1{font-size:48pt}
+  .codehilite pre{white-space:pre-wrap;overflow-wrap:anywhere}
+  .codehilite{overflow:visible}
+}
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side" aria-label="Sections">
+  <div class="brand"><strong>Prism</strong><span>PRD v0.1, draft</span></div>
+  <ul class="legend"><li><i class="sw c-blue"></i>Product</li><li><i class="sw c-indigo"></i>Design</li><li><i class="sw c-green"></i>Quality</li><li><i class="sw c-orange"></i>Delivery</li><li><i class="sw c-rose"></i>Decisions</li></ul>
+  <ol class="toc"><li><a href="#s-summary" class="g-blue"><i class="dot"></i><span class="n"></span>Summary</a></li><li><a href="#s-1-objective" class="g-blue"><i class="dot"></i><span class="n">1</span>Objective</a></li><li><a href="#s-2-tech-stack" class="g-indigo"><i class="dot"></i><span class="n">2</span>Tech Stack</a></li><li><a href="#s-3-architecture-overview" class="g-indigo"><i class="dot"></i><span class="n">3</span>Architecture Overview</a></li><li><a href="#s-4-high-level-design" class="g-indigo"><i class="dot"></i><span class="n">4</span>High-Level Design</a></li><li><a href="#s-5-low-level-design" class="g-indigo"><i class="dot"></i><span class="n">5</span>Low-Level Design</a></li><li><a href="#s-6-features-supported" class="g-blue"><i class="dot"></i><span class="n">6</span>Features Supported</a></li><li><a href="#s-7-api-surface-and-compatibility" class="g-blue"><i class="dot"></i><span class="n">7</span>API Surface and Compatibility</a></li><li><a href="#s-8-non-functional-requirements" class="g-green"><i class="dot"></i><span class="n">8</span>Non-Functional Requirements</a></li><li><a href="#s-9-security-and-compliance" class="g-green"><i class="dot"></i><span class="n">9</span>Security and Compliance</a></li><li><a href="#s-10-observability" class="g-green"><i class="dot"></i><span class="n">10</span>Observability</a></li><li><a href="#s-11-testing-and-benchmarking-strategy" class="g-green"><i class="dot"></i><span class="n">11</span>Testing and Benchmarking Strategy</a></li><li><a href="#s-12-deployment-and-operations" class="g-orange"><i class="dot"></i><span class="n">12</span>Deployment and Operations</a></li><li><a href="#s-13-roadmap-and-milestones" class="g-orange"><i class="dot"></i><span class="n">13</span>Roadmap and Milestones</a></li><li><a href="#s-14-risks-and-mitigations" class="g-rose"><i class="dot"></i><span class="n">14</span>Risks and Mitigations</a></li><li><a href="#s-15-open-questions-and-assumptions" class="g-rose"><i class="dot"></i><span class="n">15</span>Open Questions and Assumptions</a></li><li><a href="#s-glossary" class="g-rose"><i class="dot"></i><span class="n"></span>Glossary</a></li></ol>
+</nav>
+<main>
+<article class="sheet">
+  <header class="hero">
+    <div class="spectrum" aria-hidden="true"><i class="c-blue"></i><i class="c-indigo"></i><i class="c-green"></i><i class="c-orange"></i><i class="c-rose"></i></div>
+    <h1>Prism</h1>
+    <p class="subtitle">Product Requirements Document</p>
+    <p class="lead">Prism is an OpenAI-compatible AI gateway: one endpoint for many LLM providers, with routing, failover, caching, governance and tracing built in.</p>
+    <ul class="meta"><li>Draft for review</li><li>Nov 18, 2026</li><li>Owner: Sumit</li></ul>
+  </header>
+  <section class="sec g-blue" id="s-summary"><header class="sec-head"><span class="num dot"></span><h2>Summary</h2></header><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Product</td>
+<td>Prism, an open-source AI gateway</td>
+</tr>
+<tr>
+<td>Version</td>
+<td>0.1, draft for review</td>
+</tr>
+<tr>
+<td>Owner</td>
+<td>Sumit</td>
+</tr>
+<tr>
+<td>Repository</td>
+<td>/Users/macbook/Coding/Projects/Prism (empty, greenfield)</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>Python 3.13</td>
+</tr>
+<tr>
+<td>License</td>
+<td>Apache-2.0 (proposed)</td>
+</tr>
+<tr>
+<td>Scope of v1</td>
+<td>Gateway, routing, governance, observability, admin dashboard. No hosted SaaS.</td>
+</tr>
+</tbody>
+</table></div><div class="callout"><p>Read this first:</p><ul>
+<li>Prism starts from scratch in an empty repository.</li>
+<li>Every performance number here is a proposed target, to be validated by the Phase 1 benchmarks.</li>
+<li>Section 15 lists the open questions that need an answer before Phase 1 starts.</li>
+</ul></div></section><section class="sec g-blue" id="s-1-objective"><header class="sec-head"><span class="num">1</span><h2>Objective</h2></header><p>Prism gives teams one reliable, governed endpoint for all their LLM traffic.</p><h3>Problem</h3><p>Teams that call several LLM providers end up with provider SDKs spread through application code, no shared view of cost, and outages that take features down. A gateway centralises keys, routing, limits and monitoring, so applications talk to one stable endpoint and providers can change behind it.</p><h3>Vision</h3><p>Every LLM call in an organisation goes through Prism, and nobody notices when a provider fails.</p><h3>Goals</h3><ol>
+<li>One OpenAI-compatible endpoint for 10 providers at v1: OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI, GitHub Models and Ollama.</li>
+<li>Survive provider failures through retries, fallback chains and circuit breakers.</li>
+<li>Control cost and quota with virtual keys, budgets, rate limits and free-tier quota awareness.</li>
+<li>Be observable by default: Prometheus metrics, OpenTelemetry traces and per-request cost.</li>
+<li>Stay extensible through plugins and provider adapters, so new behaviour never touches the core.</li>
+<li>Start with zero configuration: one command, SQLite and in-memory limits, first request in under five minutes.</li>
+</ol><h3>Non-goals for v1</h3><ul>
+<li>Chasing record throughput. Prism targets low, predictable overhead.</li>
+<li>A hosted SaaS or multi-tenant billing.</li>
+<li>Hosting or serving models. Prism routes to inference servers and never runs one.</li>
+<li>Prompt management, evaluation platforms or fine-tuning.</li>
+<li>Multi-region clustering and active-active deployments.</li>
+</ul><h3>Target users</h3><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Persona</th>
+<th>Need</th>
+<th>What Prism offers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Application developer</td>
+<td>One URL, switch models by changing a string</td>
+<td>OpenAI and Anthropic compatible routes</td>
+</tr>
+<tr>
+<td>Platform or ML engineer</td>
+<td>Keys, budgets, failover and metrics in one place</td>
+<td>Virtual keys, routing policies, dashboards</td>
+</tr>
+<tr>
+<td>Indie developer or student</td>
+<td>Combine free tiers across providers</td>
+<td>Quota-aware routing across free-tier keys</td>
+</tr>
+<tr>
+<td>Self-hosting operator</td>
+<td>Run the gateway on their own infrastructure with little setup</td>
+<td>One container, optional PostgreSQL and Redis</td>
+</tr>
+</tbody>
+</table></div><h3>Success metrics (proposed targets)</h3><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Target</th>
+<th>How measured</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Time to first request</td>
+<td>Under 5 minutes from clone</td>
+<td>Quickstart test in CI</td>
+</tr>
+<tr>
+<td>Gateway overhead, non-streaming</td>
+<td>p50 under 3 ms, p99 under 10 ms at 1,000 RPS on 4 vCPU</td>
+<td>Load test against a mock upstream</td>
+</tr>
+<tr>
+<td>Streaming first-token overhead</td>
+<td>Under 5 ms at p95</td>
+<td>Same load test</td>
+</tr>
+<tr>
+<td>Failover</td>
+<td>At least 99% of requests succeed during a primary outage when a healthy fallback exists</td>
+<td>Chaos test</td>
+</tr>
+<tr>
+<td>Provider coverage</td>
+<td>10 providers passing adapter contract tests</td>
+<td>CI</td>
+</tr>
+<tr>
+<td>Core test coverage</td>
+<td>At least 85%</td>
+<td>Coverage report in CI</td>
+</tr>
+</tbody>
+</table></div></section><section class="sec g-indigo" id="s-2-tech-stack"><header class="sec-head"><span class="num">2</span><h2>Tech Stack</h2></header><p>Prism uses a mainstream async stack, and PostgreSQL and Redis stay optional for single-node installs.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Choice</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language</td>
+<td>Python 3.13 (3.14 once dependencies support it)</td>
+<td>Mature async ecosystem and modern typing</td>
+</tr>
+<tr>
+<td>Packaging</td>
+<td>uv with pyproject.toml and a lockfile</td>
+<td>Fast, reproducible installs</td>
+</tr>
+<tr>
+<td>Web framework</td>
+<td>FastAPI on Starlette</td>
+<td>Async, typed routes, OpenAPI docs for free</td>
+</tr>
+<tr>
+<td>ASGI server</td>
+<td>Uvicorn with uvloop, multiple worker processes</td>
+<td>Mature and simple. Granian is the benchmark alternative.</td>
+</tr>
+<tr>
+<td>Upstream HTTP client</td>
+<td>httpx AsyncClient with HTTP/2 and pooled connections</td>
+<td>One pooled client per provider. Revisit aiohttp if benchmarks show client overhead.</td>
+</tr>
+<tr>
+<td>Validation and JSON</td>
+<td>Pydantic v2 and orjson</td>
+<td>Fast validation and serialisation</td>
+</tr>
+<tr>
+<td>Primary store</td>
+<td>SQLite by default, PostgreSQL 16+ in production, through SQLAlchemy 2 async and Alembic</td>
+<td>Zero-config start, durable at scale</td>
+</tr>
+<tr>
+<td>Cache and limits</td>
+<td>In-process by default, Redis for multi-node</td>
+<td>Shared rate limits, cache and config sync</td>
+</tr>
+<tr>
+<td>Semantic cache</td>
+<td>ONNX Runtime embeddings (BGE-small) with pgvector</td>
+<td>CPU only, no extra service in Postgres installs</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>OpenTelemetry SDK, prometheus-client, structlog</td>
+<td>Vendor-neutral traces, metrics, JSON logs</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>Official MCP Python SDK</td>
+<td>Tool aggregation behind the gateway</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td>Hashed virtual API keys. OIDC in v2.</td>
+<td>Simple first, enterprise later</td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td>Next.js (App Router), shadcn/ui, Tailwind, SWR, Recharts</td>
+<td>Component-driven UI with simple data fetching and charts</td>
+</tr>
+<tr>
+<td>Code quality</td>
+<td>ruff, pyright, pytest, pytest-asyncio, respx, hypothesis</td>
+<td>Fast lint, strict types, deterministic upstream mocks</td>
+</tr>
+<tr>
+<td>Load testing</td>
+<td>Locust and k6 against a mock upstream</td>
+<td>Repeatable overhead measurements</td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Docker (multi-stage), Docker Compose, Helm chart, GitHub Actions</td>
+<td>One image for every environment</td>
+</tr>
+</tbody>
+</table></div><p>Versions are pinned from PyPI when the repository is created. None are fixed in this document.</p></section><section class="sec g-indigo" id="s-3-architecture-overview"><header class="sec-head"><span class="num">3</span><h2>Architecture Overview</h2></header><p>Prism splits a stateless data plane that serves requests from a control plane that owns configuration, so workers scale out freely and config changes never need a restart.</p><figure class="diagram"><svg aria-label="Request handling stays stateless and configuration lives in a control plane" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="13" role="img" viewbox="0 0 760 532" xmlns="http://www.w3.org/2000/svg"><title>Request handling stays stateless and configuration lives in a control plane</title><defs><marker id="arch" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0L10 5L0 10z" fill="#9aa3b2"></path></marker></defs><text fill="#1f2937" font-size="15" font-weight="600" text-anchor="start" x="24" y="30">Request handling stays stateless, and configuration lives in a control plane</text><rect fill="#ffffff" fill-opacity="1" height="44" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="400" x="180" y="52"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="380" y="79">Clients: OpenAI and Anthropic SDKs, agents, curl</text><rect fill="#2563eb" fill-opacity="0.1" height="156" rx="8" stroke="#2563eb" stroke-width="1.25" width="712" x="24" y="124"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="start" x="40" y="146">Data plane: stateless workers that scale out</text><rect fill="#ffffff" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="40" y="160"></rect><rect fill="none" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="40" y="160"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="99" y="184">API layer</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="99" y="200">OpenAI routes</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="99" y="216">Anthropic API</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="99" y="232">SSE streaming</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="99" y="248">Request IDs</text><rect fill="#ffffff" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="180" y="160"></rect><rect fill="none" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="180" y="160"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="239" y="184">Auth, limits</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="239" y="200">Virtual keys</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="239" y="216">Rate limits</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="239" y="232">Budgets</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="239" y="248">Team scopes</text><rect fill="#ffffff" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="320" y="160"></rect><rect fill="none" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="320" y="160"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="379" y="184">Plugins</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="379" y="200">Guardrails</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="379" y="216">PII redaction</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="379" y="232">Semantic cache</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="379" y="248">Custom hooks</text><rect fill="#ffffff" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="460" y="160"></rect><rect fill="#2563eb" fill-opacity="0.16" height="104" rx="8" stroke="#2563eb" stroke-width="2" width="118" x="460" y="160"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="519" y="184">Router</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="519" y="200">Weighted keys</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="519" y="216">Fallback chains</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="519" y="232">Circuit breaker</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="519" y="248">Quota aware</text><rect fill="#ffffff" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="600" y="160"></rect><rect fill="none" fill-opacity="1" height="104" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="600" y="160"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="659" y="184">Adapters</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="659" y="200">Request mapping</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="659" y="216">Stream parsing</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="659" y="232">Error mapping</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="659" y="248">Cost metering</text><rect fill="#e4672b" fill-opacity="0.1" height="72" rx="8" stroke="#e4672b" stroke-width="1.25" width="256" x="480" y="324"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="608" y="348">LLM providers</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="608" y="364">OpenAI, Anthropic, Gemini,</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="608" y="380">Groq, Mistral, Ollama, more</text><rect fill="#3b4a6b" fill-opacity="0.1" height="88" rx="8" stroke="#3b4a6b" stroke-width="1.25" width="348" x="24" y="420"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="start" x="40" y="444">Control plane</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="40" y="460">Admin API: providers, keys, routes, budgets</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="40" y="476">Dashboard: usage and cost views</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="40" y="492">Config store: SQLite or PostgreSQL</text><rect fill="#d6457f" fill-opacity="0.1" height="88" rx="8" stroke="#d6457f" stroke-width="1.25" width="348" x="388" y="420"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="start" x="404" y="444">Shared services</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="404" y="460">Redis: rate limits, cache, config sync</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="404" y="476">Vector index: semantic cache</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="404" y="492">Telemetry: Prometheus and OpenTelemetry</text><path d="M380 96V124" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M158 212H180" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M298 212H320" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M438 212H460" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M578 212H600" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M659 280V324" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M198 420V280" fill="none" marker-end="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M420 420V280" fill="none" marker-end="url(#arch)" marker-start="url(#arch)" stroke="#9aa3b2" stroke-width="1.25"></path><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="392" y="114">OpenAI or Anthropic format</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="667" y="306">HTTPS and SSE</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="206" y="352">config and keys</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="end" x="412" y="380">state and telemetry</text></svg><figcaption>Clients call the data plane, which reads its configuration from the control plane's store and keeps shared state only in shared services.</figcaption></figure><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Plane</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API layer</td>
+<td>Data</td>
+<td>OpenAI and Anthropic compatible routes, SSE streaming, request IDs</td>
+</tr>
+<tr>
+<td>Auth and limits</td>
+<td>Data</td>
+<td>Virtual key lookup, rate limits, budget checks, team scopes</td>
+</tr>
+<tr>
+<td>Plugin pipeline</td>
+<td>Data</td>
+<td>Pre and post hooks: guardrails, PII redaction, semantic cache, custom code</td>
+</tr>
+<tr>
+<td>Router</td>
+<td>Data</td>
+<td>Picks a target by policy, with retries, fallback chains and circuit breakers</td>
+</tr>
+<tr>
+<td>Provider adapters</td>
+<td>Data</td>
+<td>Translate requests, responses, streams and errors for each provider</td>
+</tr>
+<tr>
+<td>Usage meter</td>
+<td>Data</td>
+<td>Counts tokens, prices each request, emits events off the hot path</td>
+</tr>
+<tr>
+<td>Admin API</td>
+<td>Control</td>
+<td>Create and edit providers, keys, routes, budgets and plugins</td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td>Control</td>
+<td>Usage, cost and health views over the admin API</td>
+</tr>
+<tr>
+<td>Config store</td>
+<td>Control</td>
+<td>Source of truth, cached in every worker and refreshed on change</td>
+</tr>
+<tr>
+<td>Shared services</td>
+<td>Shared</td>
+<td>Redis, vector index, telemetry backends</td>
+</tr>
+</tbody>
+</table></div><p>Design principles:</p><ul>
+<li>Workers are stateless, so any worker can serve any request.</li>
+<li>Configuration is data in the store, never code or environment edits.</li>
+<li>Adapters absorb every provider quirk, so the core speaks one internal format.</li>
+<li>Authentication fails closed. Cache and plugins fail open unless a policy says otherwise.</li>
+</ul></section><section class="sec g-indigo" id="s-4-high-level-design"><header class="sec-head"><span class="num">4</span><h2>High-Level Design</h2></header><p>A request passes through five stages: authenticate, pre-process, route, call the provider, post-process. Every failure is classified, then retried, failed over or returned as a clean error.</p><figure class="diagram"><svg aria-label="Every failure is retried, failed over, or returned as a clean error" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="13" role="img" viewbox="0 0 760 348" xmlns="http://www.w3.org/2000/svg"><title>Every failure is retried, failed over, or returned as a clean error</title><defs><marker id="flow" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0L10 5L0 10z" fill="#9aa3b2"></path></marker></defs><text fill="#1f2937" font-size="15" font-weight="600" text-anchor="start" x="24" y="30">Every failure is retried, failed over, or returned as a clean error</text><path d="M158 100H180" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M298 100H320" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M438 100H460" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M578 100H600" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M659 124V210H575" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M463 210H414" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M264 210H158" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M379 124V148H99V186" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M519 178V124" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><path d="M519 242V276" fill="none" marker-end="url(#flow)" stroke="#9aa3b2" stroke-width="1.25"></path><rect fill="#ffffff" fill-opacity="1" height="48" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="40.0" y="76.0"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="99" y="105">Receive</text><rect fill="#ffffff" fill-opacity="1" height="48" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="180.0" y="76.0"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="239" y="105">Auth, limits</text><rect fill="#ffffff" fill-opacity="1" height="48" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="320.0" y="76.0"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="379" y="105">Pre-plugins</text><rect fill="#ffffff" fill-opacity="1" height="48" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="460.0" y="76.0"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="519" y="105">Pick target</text><rect fill="#ffffff" fill-opacity="1" height="48" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="118" x="600.0" y="76.0"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="659" y="105">Call provider</text><polygon fill="#2563eb" fill-opacity="0.12" points="463,210 519,178 575,210 519,242" stroke="#2563eb" stroke-width="2"></polygon><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="519" y="215">Success?</text><rect fill="#ffffff" fill-opacity="1" height="48" rx="8" stroke="#9aa3b2" stroke-width="1.25" width="150" x="264.0" y="186.0"></rect><text fill="#1f2937" font-size="13" font-weight="400" text-anchor="middle" x="339" y="207">Post-plugins</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="339" y="223">and metering</text><rect fill="#1a9556" fill-opacity="0.12" height="48" rx="8" stroke="#1a9556" stroke-width="1.25" width="118" x="40.0" y="186.0"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="99" y="207">Respond</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="99" y="223">stream or JSON</text><rect fill="#d33c3c" fill-opacity="0.12" height="48" rx="8" stroke="#d33c3c" stroke-width="1.25" width="190" x="424.0" y="276.0"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="519" y="297">Out of targets</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="519" y="313">return a mapped error</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="438" y="200">yes</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="239" y="164">cache hit: skip the provider</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="527" y="158">no: next target</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="start" x="527" y="264">none left</text></svg><figcaption>A cache hit skips the provider. A failed call returns to the router, which tries the next target until none are left.</figcaption></figure><h3>Routing and resilience</h3><ul>
+<li>A route maps a public model name, such as <code>fast-chat</code>, to an ordered list of targets. Each target is a provider, a model and a pool of keys.</li>
+<li>Routing policies in v1: priority, weighted, round robin, latency-based, cost-based and quota-aware (for free tiers). Evaluation-driven routing comes in v2.</li>
+<li>Errors are classified as retryable (429, 5xx, timeout), non-retryable (400, 401, content policy) or misconfiguration.</li>
+<li>A retryable error is retried on the same target with exponential backoff and jitter, at most twice, then moves to the next target.</li>
+<li>Each target has a circuit breaker. It opens after consecutive failures and sends a probe request after a cooldown.</li>
+</ul><h3>Streaming</h3><ul>
+<li>Server-sent events pass through chunk by chunk. The adapter converts each provider chunk to the OpenAI delta format on the fly.</li>
+<li>Fallback is only allowed before the first token. After that, a failure ends the stream with an error event and records partial usage.</li>
+<li>A client disconnect cancels the upstream call. Each request has a bounded buffer so a slow client cannot grow memory.</li>
+</ul><h3>Caching</h3><ul>
+<li>Exact cache: a hash of the normalised request (model, messages, parameters) maps to a stored response with a TTL.</li>
+<li>Semantic cache: the last user message is embedded and matched by nearest neighbour above a similarity threshold, scoped to one route and one team. It is opt-in per route.</li>
+<li>Requests with tool calls or high temperature are not cached unless the route allows it.</li>
+</ul><h3>Governance</h3><ul>
+<li>A virtual key is a hashed secret tied to a team, a budget, rate limits and a list of allowed routes.</li>
+<li>Budgets are checked against an estimate before the call and settled with real usage after it. Limits are soft or hard and reset daily, weekly or monthly.</li>
+<li>Rate limits use a token bucket per key, for requests per minute and tokens per minute.</li>
+</ul><h3>MCP gateway (v2)</h3><ul>
+<li>MCP servers are registered once and exposed through one governed <code>/mcp</code> endpoint with per-key tool allow lists.</li>
+<li>Tool calls are traced and metered like model calls.</li>
+</ul><h3>Configuration propagation</h3><ul>
+<li>The admin API writes to the store and publishes a change event. Redis pub/sub is used in multi-node setups and short polling in single-node ones.</li>
+<li>Each worker rebuilds an immutable config snapshot and swaps it in atomically, so in-flight requests never see half-applied changes.</li>
+</ul><h3>Deployment topologies</h3><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Topology</th>
+<th>Components</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Single node</td>
+<td>One container, SQLite, in-memory limits</td>
+<td>Local development, small teams</td>
+</tr>
+<tr>
+<td>Scaled</td>
+<td>Several gateway workers, PostgreSQL, Redis, dashboard</td>
+<td>Production</td>
+</tr>
+<tr>
+<td>Kubernetes</td>
+<td>Helm chart, autoscaling on CPU and request rate, external Postgres and Redis</td>
+<td>Platform teams</td>
+</tr>
+</tbody>
+</table></div></section><section class="sec g-indigo" id="s-5-low-level-design"><header class="sec-head"><span class="num">5</span><h2>Low-Level Design</h2></header><p>Three small contracts (provider adapter, plugin, routing policy) carry almost all of Prism's logic, so new providers and behaviours never touch the core.</p><h3>Repository layout</h3><div class="codehilite"><pre><span></span><code>Prism/
+├── pyproject.toml
+├── src/prism/
+│   ├── main.py              # app factory and startup
+│   ├── api/
+│   │   ├── openai.py        # /v1/chat/completions, /v1/embeddings, /v1/models
+│   │   ├── anthropic.py     # /v1/messages
+│   │   └── admin.py         # admin API
+│   ├── core/
+│   │   ├── types.py         # internal request, response and chunk types
+│   │   ├── pipeline.py      # runs a request through every stage
+│   │   ├── router.py        # builds the ordered target list
+│   │   ├── policies/        # priority, weighted, latency, cost, quota
+│   │   ├── resilience.py    # retries, backoff, circuit breaker
+│   │   └── errors.py        # error kinds and mapping
+│   ├── providers/           # one adapter per provider
+│   ├── plugins/             # guardrails, pii, cache
+│   ├── governance/          # keys, budgets, rate limits
+│   ├── store/               # database, migrations, config snapshot
+│   ├── telemetry/           # metrics, tracing, logging
+│   └── mcp/                 # MCP gateway (v2)
+├── dashboard/               # Next.js admin UI
+├── tests/                   # unit, contract, integration, load
+├── deploy/                  # Dockerfile, compose.yaml, Helm chart
+└── docs/
+</code></pre></div><h3>Core contracts</h3><div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProviderAdapter</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">chat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">:</span> <span class="n">ChatRequest</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">Target</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResponse</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Send one request and return the full answer."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">chat_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">:</span> <span class="n">ChatRequest</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">Target</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatChunk</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Send one request and yield answer pieces as they arrive."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">classify_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ErrorKind</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Turn a provider error into one of Prism's error kinds."""</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Plugin</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">before_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">RequestContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Decision</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return Continue, ShortCircuit(response) or Reject(error)."""</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">after_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">RequestContext</span><span class="p">,</span> <span class="n">resp</span><span class="p">:</span> <span class="n">ChatResponse</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run after the answer is ready. Used for logging and cache writes."""</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RoutingPolicy</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">order</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Target</span><span class="p">],</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">RequestContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Target</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the targets in the order they should be tried."""</span>
+</code></pre></div><h3>Data model</h3><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Key columns</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>providers</code></td>
+<td><code>id</code>, <code>kind</code>, <code>base_url</code>, <code>enabled</code></td>
+<td>One row per upstream provider</td>
+</tr>
+<tr>
+<td><code>provider_keys</code></td>
+<td><code>id</code>, <code>provider_id</code>, <code>secret_encrypted</code>, <code>weight</code>, <code>daily_quota</code>, <code>status</code></td>
+<td>Secrets encrypted at rest</td>
+</tr>
+<tr>
+<td><code>routes</code></td>
+<td><code>id</code>, <code>name</code>, <code>policy</code>, <code>config_json</code></td>
+<td>The public model name clients call</td>
+</tr>
+<tr>
+<td><code>route_targets</code></td>
+<td><code>route_id</code>, <code>position</code>, <code>provider_id</code>, <code>model</code>, <code>key_pool</code></td>
+<td>Ordered fallback chain</td>
+</tr>
+<tr>
+<td><code>teams</code></td>
+<td><code>id</code>, <code>name</code></td>
+<td>Owner of keys and budgets</td>
+</tr>
+<tr>
+<td><code>virtual_keys</code></td>
+<td><code>id</code>, <code>key_hash</code>, <code>team_id</code>, <code>allowed_routes</code>, <code>rpm</code>, <code>tpm</code>, <code>expires_at</code></td>
+<td>Only the hash is stored</td>
+</tr>
+<tr>
+<td><code>budgets</code></td>
+<td><code>id</code>, <code>scope</code>, <code>limit_usd</code>, <code>period</code>, <code>reset_at</code>, <code>spent_usd</code></td>
+<td>Scope is a key or a team</td>
+</tr>
+<tr>
+<td><code>usage_events</code></td>
+<td><code>id</code>, <code>ts</code>, <code>request_id</code>, <code>key_id</code>, <code>route</code>, <code>provider</code>, <code>model</code>, <code>input_tokens</code>, <code>output_tokens</code>, <code>cost_usd</code>, <code>latency_ms</code>, <code>status</code>, <code>cache_hit</code></td>
+<td>Partitioned by day on PostgreSQL</td>
+</tr>
+<tr>
+<td><code>plugin_configs</code></td>
+<td><code>id</code>, <code>scope</code>, <code>plugin</code>, <code>position</code>, <code>config_json</code></td>
+<td>Order decides execution</td>
+</tr>
+<tr>
+<td><code>audit_log</code></td>
+<td><code>id</code>, <code>ts</code>, <code>actor</code>, <code>action</code>, <code>target</code></td>
+<td>Every admin change</td>
+</tr>
+</tbody>
+</table></div><h3>Key algorithms</h3><ul>
+<li><strong>Key selection:</strong> weighted random choice among keys that are healthy and still have quota left today.</li>
+<li><strong>Retry delay:</strong> <code>min(2 s, 0.2 s × 2^attempt)</code> with random jitter of 50 to 100 percent, at most two retries per target.</li>
+<li><strong>Circuit breaker:</strong> closed, open and half-open states. Proposed defaults: open after 5 consecutive failures, wait 30 seconds, then allow one probe request.</li>
+<li><strong>Rate limit:</strong> a token bucket per key. Multi-node installs run it as an atomic Lua script in Redis.</li>
+<li><strong>Cost:</strong> a price table per model (per million tokens) held in the store and editable through the admin API. Budgets use an estimate before the call and real usage after.</li>
+<li><strong>Usage events:</strong> written to an in-memory queue and flushed in batches, so the database never sits on the request path.</li>
+</ul><h3>Error taxonomy</h3><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Examples</th>
+<th>Action</th>
+<th>Client sees</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rate_limited</code></td>
+<td>Provider 429</td>
+<td>Retry, then next target</td>
+<td>429 with Retry-After when all targets are exhausted</td>
+</tr>
+<tr>
+<td><code>upstream_unavailable</code></td>
+<td>5xx, timeout, connection error</td>
+<td>Retry, then next target</td>
+<td>502 or 504</td>
+</tr>
+<tr>
+<td><code>invalid_request</code></td>
+<td>400, 422</td>
+<td>No retry</td>
+<td>400 with the provider message</td>
+</tr>
+<tr>
+<td><code>auth_failed</code></td>
+<td>401 or 403 on a provider key</td>
+<td>Disable the key, try the next target, raise an alert</td>
+<td>502 with a generic message</td>
+</tr>
+<tr>
+<td><code>content_blocked</code></td>
+<td>Provider safety filter</td>
+<td>No retry, optional route fallback</td>
+<td>400 with code <code>content_policy</code></td>
+</tr>
+<tr>
+<td><code>budget_exceeded</code></td>
+<td>Prism budget reached</td>
+<td>Reject before the call</td>
+<td>429 with code <code>budget_exceeded</code></td>
+</tr>
+<tr>
+<td><code>internal_error</code></td>
+<td>Bug in Prism</td>
+<td>No retry</td>
+<td>500</td>
+</tr>
+</tbody>
+</table></div><h3>Config schema (example values)</h3><div class="codehilite"><pre><span></span><code><span class="nt">providers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">groq</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai_compatible</span>
+<span class="w">    </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://api.groq.com/openai/v1</span>
+<span class="w">    </span><span class="nt">keys</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GROQ_KEY_1</span>
+<span class="w">        </span><span class="nt">weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GROQ_KEY_2</span>
+<span class="w">        </span><span class="nt">weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+
+<span class="nt">routes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fast-chat</span>
+<span class="w">    </span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">priority</span>
+<span class="w">    </span><span class="nt">targets</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">groq</span>
+<span class="w">        </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;model-id&gt;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gemini</span>
+<span class="w">        </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;model-id&gt;</span>
+<span class="w">    </span><span class="nt">retry</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">max_attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">backoff_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
+<span class="w">    </span><span class="nt">cache</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">exact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">      </span><span class="nt">ttl_s</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span>
+</code></pre></div></section><section class="sec g-blue" id="s-6-features-supported"><header class="sec-head"><span class="num">6</span><h2>Features Supported</h2></header><p>Prism has 26 planned features: 21 in v1 and 5 in v2.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Feature</th>
+<th>What it does</th>
+<th>Release</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API</td>
+<td>OpenAI chat completions</td>
+<td><code>/v1/chat/completions</code> with streaming, tool calls and structured output</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Models and embeddings</td>
+<td><code>/v1/models</code> and <code>/v1/embeddings</code></td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Anthropic Messages route</td>
+<td><code>/v1/messages</code> as a drop-in for the Anthropic SDK</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Multimodal input</td>
+<td>Image and audio passthrough</td>
+<td><span class="chip v2">v2</span></td>
+</tr>
+<tr>
+<td>Providers</td>
+<td>Core five</td>
+<td>OpenAI, Anthropic, Gemini, Groq, Mistral</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Providers</td>
+<td>OpenAI-compatible endpoints</td>
+<td>vLLM, llama.cpp, LM Studio or any compatible server</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Providers</td>
+<td>Free-tier set</td>
+<td>Cerebras, NVIDIA NIM, Cloudflare Workers AI, GitHub Models, Ollama</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Providers</td>
+<td>Cloud platforms</td>
+<td>Azure OpenAI, AWS Bedrock, Vertex AI</td>
+<td><span class="chip v2">v2</span></td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>Priority and weighted routes</td>
+<td>Ordered or weighted target lists</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>Retries, fallbacks, circuit breakers</td>
+<td>Automatic recovery from provider failures</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>Key pools</td>
+<td>Several keys per provider with weights and daily quotas</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>Smart policies</td>
+<td>Latency-, cost- and quota-aware routing</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>Evaluation-driven routing</td>
+<td>Pick targets by measured answer quality</td>
+<td><span class="chip v2">v2</span></td>
+</tr>
+<tr>
+<td>Governance</td>
+<td>Virtual keys</td>
+<td>Hashed keys tied to teams and allowed routes</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Governance</td>
+<td>Rate limits and budgets</td>
+<td>RPM, TPM and spend limits with reset periods</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Governance</td>
+<td>SSO and RBAC</td>
+<td>OIDC login and role-based admin access</td>
+<td><span class="chip v2">v2</span></td>
+</tr>
+<tr>
+<td>Plugins</td>
+<td>Response caching</td>
+<td>Exact cache and an opt-in semantic cache</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Plugins</td>
+<td>Guardrails and PII</td>
+<td>Keyword filters and PII redaction</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Plugins</td>
+<td>Plugin SDK</td>
+<td>Write custom hooks that run before and after each request</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>MCP gateway</td>
+<td>Governed tool access per key</td>
+<td><span class="chip v2">v2</span></td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>Metrics and logs</td>
+<td>Prometheus metrics and structured JSON logs</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>Traces and cost</td>
+<td>OpenTelemetry spans, per-request cost, usage events</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Control plane</td>
+<td>YAML config</td>
+<td>File-based setup for single-node use</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Control plane</td>
+<td>Admin API and dashboard</td>
+<td>Manage and monitor from a web UI</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Docker and Compose</td>
+<td>One image, one command to start</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Helm chart</td>
+<td>Kubernetes deployment</td>
+<td><span class="chip v1">v1</span></td>
+</tr>
+</tbody>
+</table></div></section><section class="sec g-blue" id="s-7-api-surface-and-compatibility"><header class="sec-head"><span class="num">7</span><h2>API Surface and Compatibility</h2></header><p>Prism uses the OpenAI API shape as its native format and adds an Anthropic route and an admin API, so existing SDKs work by changing only the base URL.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /v1/chat/completions</code></td>
+<td>Chat, with streaming over server-sent events</td>
+</tr>
+<tr>
+<td><code>POST /v1/embeddings</code></td>
+<td>Embeddings</td>
+</tr>
+<tr>
+<td><code>GET /v1/models</code></td>
+<td>Route names the calling key may use</td>
+</tr>
+<tr>
+<td><code>POST /v1/messages</code></td>
+<td>Anthropic Messages format</td>
+</tr>
+<tr>
+<td><code>GET /healthz</code> and <code>GET /readyz</code></td>
+<td>Liveness and readiness</td>
+</tr>
+<tr>
+<td><code>GET /metrics</code></td>
+<td>Prometheus metrics</td>
+</tr>
+<tr>
+<td><code>/admin/v1/*</code></td>
+<td>Providers, keys, routes, virtual keys, budgets, usage, plugins, audit log. Separate admin credentials.</td>
+</tr>
+</tbody>
+</table></div><p>Drop-in use with the OpenAI SDK:</p><div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAI</span>
+
+<span class="c1"># Only the address and the key change. The rest of the code stays the same.</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="s2">"http://localhost:8000/v1"</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="s2">"prism-virtual-key"</span><span class="p">)</span>
+<span class="n">reply</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">"fast-chat"</span><span class="p">,</span>  <span class="c1"># a Prism route name</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Hello"</span><span class="p">}],</span>
+<span class="p">)</span>
+</code></pre></div><p>Compatibility rules:</p><ul>
+<li>Unknown parameters pass straight through to OpenAI-compatible providers. For other providers the adapter maps or drops them and sets an <code>x-prism-warning</code> header.</li>
+<li>Every response carries <code>x-prism-request-id</code>, <code>x-prism-provider</code>, <code>x-prism-model</code> and <code>x-prism-cache</code> (hit or miss).</li>
+<li>Errors use the OpenAI error object: <code>message</code>, <code>type</code>, <code>code</code>.</li>
+<li><code>/v1</code> stays stable. A breaking change ships under <code>/v2</code>.</li>
+</ul></section><section class="sec g-green" id="s-8-non-functional-requirements"><header class="sec-head"><span class="num">8</span><h2>Non-Functional Requirements</h2></header><p>Prism aims for single-digit-millisecond overhead and stays up when its own dependencies fail. All numbers are proposed targets to confirm in Phase 1.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overhead</td>
+<td>Non-streaming p50 under 3 ms and p99 under 10 ms at 1,000 RPS on 4 vCPU. Streaming first-token overhead under 5 ms at p95.</td>
+</tr>
+<tr>
+<td>Throughput</td>
+<td>At least 1,000 sustained RPS per 4 vCPU instance against a mock upstream, scaling close to linearly across workers</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>Under 512 MB per worker at 500 concurrent streams</td>
+</tr>
+<tr>
+<td>Startup</td>
+<td>Ready in under 3 seconds. A config reload completes in under 100 ms.</td>
+</tr>
+<tr>
+<td>Redis down</td>
+<td>Fall back to in-process rate limits and skip the cache. Requests keep flowing.</td>
+</tr>
+<tr>
+<td>Database down</td>
+<td>Keep serving from the last config snapshot (fail static). Buffer usage events up to 10,000, then drop the oldest and count the drops in a metric.</td>
+</tr>
+<tr>
+<td>Usage durability</td>
+<td>Events flush in batches every 5 seconds. Loss is possible only on a hard crash.</td>
+</tr>
+<tr>
+<td>Scalability</td>
+<td>Stateless workers scale horizontally. The database sees only batched writes.</td>
+</tr>
+<tr>
+<td>Portability</td>
+<td>Python 3.13 or newer, Linux and macOS, amd64 and arm64 container images</td>
+</tr>
+<tr>
+<td>Maintainability</td>
+<td>Strict type checking on core modules, at least 85% test coverage, a written decision record for each major design choice</td>
+</tr>
+</tbody>
+</table></div></section><section class="sec g-green" id="s-9-security-and-compliance"><header class="sec-head"><span class="num">9</span><h2>Security and Compliance</h2></header><p>Prism holds every provider credential an organisation owns, so it treats key handling, auditability and cost abuse as first-class design problems.</p><ul>
+<li>Provider keys are encrypted at rest with AES-GCM, using a master key from the environment or a KMS. They never appear in logs and are masked in the UI.</li>
+<li>Virtual keys are shown once at creation. Only a salted hash is stored, plus a short prefix for identification.</li>
+<li>The admin API uses separate credentials, can listen on a separate port, and writes every change to the audit log.</li>
+<li>Prompt and response logging is off by default. Routes can opt in, with PII redaction and a retention period.</li>
+<li>Request size limits and timeouts apply everywhere. Custom <code>base_url</code> values that point to private network ranges are refused unless an operator allows them.</li>
+<li>TLS ends at the ingress or reverse proxy. Prism verifies certificates on every upstream call.</li>
+</ul><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Threat</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stolen virtual key</td>
+<td>Expiry, per-key rate limit and budget, instant revocation</td>
+</tr>
+<tr>
+<td>Leaked provider key</td>
+<td>Encryption at rest, no logging, rotation support, auto-disable on repeated 401</td>
+</tr>
+<tr>
+<td>Runaway cost</td>
+<td>Hard budgets, rate limits, an alert at 80% of budget</td>
+</tr>
+<tr>
+<td>SSRF through a custom endpoint</td>
+<td>Private ranges denied by default</td>
+</tr>
+<tr>
+<td>Prompt injection through tools</td>
+<td>Per-key MCP tool allow lists and argument guardrails (v2)</td>
+</tr>
+<tr>
+<td>Supply chain</td>
+<td>Pinned lockfile, <code>pip-audit</code> in CI, SBOM, signed container images</td>
+</tr>
+</tbody>
+</table></div><p>Compliance posture: Prism gives operators the controls they need for GDPR or SOC 2 work (audit log, retention settings, no content logging by default). The project itself is not certified.</p></section><section class="sec g-green" id="s-10-observability"><header class="sec-head"><span class="num">10</span><h2>Observability</h2></header><p>Every request is measurable from day one: metrics for dashboards and alerts, traces for debugging, and structured logs that never contain prompts by default.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Type</th>
+<th>Labels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prism_requests_total</code></td>
+<td>Counter</td>
+<td>route, provider, model, status</td>
+</tr>
+<tr>
+<td><code>prism_request_duration_seconds</code></td>
+<td>Histogram</td>
+<td>route, provider</td>
+</tr>
+<tr>
+<td><code>prism_gateway_overhead_seconds</code></td>
+<td>Histogram</td>
+<td>route</td>
+</tr>
+<tr>
+<td><code>prism_upstream_errors_total</code></td>
+<td>Counter</td>
+<td>provider, kind</td>
+</tr>
+<tr>
+<td><code>prism_fallbacks_total</code></td>
+<td>Counter</td>
+<td>route, from_provider, to_provider</td>
+</tr>
+<tr>
+<td><code>prism_circuit_state</code></td>
+<td>Gauge</td>
+<td>provider, model</td>
+</tr>
+<tr>
+<td><code>prism_tokens_total</code></td>
+<td>Counter</td>
+<td>route, model, direction</td>
+</tr>
+<tr>
+<td><code>prism_cost_usd_total</code></td>
+<td>Counter</td>
+<td>team, route</td>
+</tr>
+<tr>
+<td><code>prism_cache_hits_total</code></td>
+<td>Counter</td>
+<td>route, type</td>
+</tr>
+<tr>
+<td><code>prism_key_quota_remaining</code></td>
+<td>Gauge</td>
+<td>provider, key_id</td>
+</tr>
+</tbody>
+</table></div><ul>
+<li><strong>Traces:</strong> one span per stage (auth, plugins, routing, upstream call) with OpenTelemetry GenAI attributes for model and token usage. The W3C <code>traceparent</code> header is accepted and forwarded.</li>
+<li><strong>Logs:</strong> JSON lines with the request ID, route, provider, status and latency. No prompt or response text unless a route opts in.</li>
+<li><strong>Dashboards:</strong> a Grafana JSON bundle ships with Prism, and the built-in dashboard shows usage, cost by team, provider health, fallback rate, latency and cache hit ratio.</li>
+<li><strong>Alerts:</strong> sample Prometheus rules for error rate, fallback spikes, a circuit open for more than 5 minutes, and budgets at 80%.</li>
+</ul></section><section class="sec g-green" id="s-11-testing-and-benchmarking-strategy"><header class="sec-head"><span class="num">11</span><h2>Testing and Benchmarking Strategy</h2></header><p>Prism earns trust with repeatable tests at every layer and a public benchmark anyone can reproduce.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it checks</th>
+<th>Tools</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unit</td>
+<td>Routing policies, retry delays, circuit breaker states, cost maths</td>
+<td>pytest, hypothesis</td>
+</tr>
+<tr>
+<td>Adapter contract</td>
+<td>Each adapter against recorded fixtures: request mapping, streaming, error classification</td>
+<td>pytest, respx</td>
+</tr>
+<tr>
+<td>Integration</td>
+<td>The full gateway with a fake upstream, on SQLite and on PostgreSQL plus Redis</td>
+<td>pytest-asyncio, testcontainers</td>
+</tr>
+<tr>
+<td>Load</td>
+<td>Overhead and throughput against a mock upstream with fixed latency</td>
+<td>Locust, k6</td>
+</tr>
+<tr>
+<td>Chaos</td>
+<td>Upstream 5xx, timeouts, slow streams, mid-stream disconnects</td>
+<td>Fault-injecting mock upstream</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Dependency audit, secret scanning, static analysis</td>
+<td>pip-audit, ruff, CI scanners</td>
+</tr>
+<tr>
+<td>Regression</td>
+<td>Overhead tracked per commit, CI fails on a regression above 15%</td>
+<td>pytest-benchmark</td>
+</tr>
+</tbody>
+</table></div><p>Published benchmark: share the load-test method, the scripts and the raw results, so anyone can reproduce the overhead numbers.</p></section><section class="sec g-orange" id="s-12-deployment-and-operations"><header class="sec-head"><span class="num">12</span><h2>Deployment and Operations</h2></header><p>One container image runs everywhere: a single command for local use, Compose for small teams, and a Helm chart for Kubernetes.</p><ul>
+<li><strong>Docker:</strong> multi-stage build, non-root user. <code>docker run -p 8000:8000 prism</code> starts with SQLite and in-memory limits.</li>
+<li><strong>Compose:</strong> gateway, PostgreSQL, Redis and dashboard in one file.</li>
+<li><strong>Helm:</strong> values for replicas, autoscaling, secrets and ingress.</li>
+<li><strong>Configuration:</strong> environment variables for secrets and bootstrap, a YAML file for declarative setup, the admin API for live changes.</li>
+<li><strong>Migrations:</strong> Alembic runs on startup for single-node installs and as a separate job for scaled ones.</li>
+<li><strong>Upgrades:</strong> rolling. A new version must read the config snapshot written by the previous one.</li>
+</ul><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>First check</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>High latency</td>
+<td><code>prism_gateway_overhead_seconds</code> against provider latency</td>
+<td>If overhead is high, profile and add workers. If the provider is slow, change route policy.</td>
+</tr>
+<tr>
+<td>Many 502 responses</td>
+<td><code>prism_upstream_errors_total</code> by provider and kind</td>
+<td>Check circuit states and key status. Add a fallback target.</td>
+</tr>
+<tr>
+<td>Budget not enforced</td>
+<td>Virtual key to team to budget links</td>
+<td>Check the budget scope and reset time</td>
+</tr>
+<tr>
+<td>Rate limits uneven across nodes</td>
+<td>Redis connectivity</td>
+<td>Restore Redis. Limits are per node while it is down.</td>
+</tr>
+<tr>
+<td>Config change not applied</td>
+<td>Config snapshot version in <code>/readyz</code></td>
+<td>Check pub/sub or polling, then restart the worker</td>
+</tr>
+</tbody>
+</table></div></section><section class="sec g-orange" id="s-13-roadmap-and-milestones"><header class="sec-head"><span class="num">13</span><h2>Roadmap and Milestones</h2></header><p>Prism v1 ships in five phases over about 16 weeks, and each phase ends at a gate that must pass before the next one starts.</p><figure class="diagram"><svg aria-label="Five phases, each ending at a gate that must pass before the next starts" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="13" role="img" viewbox="0 0 760 264" xmlns="http://www.w3.org/2000/svg"><title>Five phases, each ending at a gate that must pass before the next starts</title><defs><marker id="road" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0L10 5L0 10z" fill="#9aa3b2"></path></marker></defs><text fill="#1f2937" font-size="15" font-weight="600" text-anchor="start" x="24" y="30">Five phases, and each one ends at a gate that must pass before the next starts</text><rect fill="#2563eb" fill-opacity="0.12" height="94" rx="8" stroke="#2563eb" stroke-width="1.25" width="136" x="24" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="92" y="88">Foundations</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="104">P0, weeks 1-2</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="126">Repo, CI, schemas,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="142">adapter contract</text><line stroke="#9aa3b2" stroke-width="1.25" x1="92" x2="92" y1="158" y2="168"></line><polygon fill="#ffffff" points="76,184 92,168 108,184 92,200" stroke="#2563eb" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="92" y="188">G0</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="222">CI green,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="238">contracts agreed</text><rect fill="#e4672b" fill-opacity="0.12" height="94" rx="8" stroke="#e4672b" stroke-width="1.25" width="136" x="168" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="236" y="88">Core gateway</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="104">P1, weeks 3-6</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="126">Chat, streaming,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="142">retries, fallback</text><line stroke="#9aa3b2" stroke-width="1.25" x1="236" x2="236" y1="158" y2="168"></line><polygon fill="#ffffff" points="220,184 236,168 252,184 236,200" stroke="#e4672b" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="236" y="188">G1</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="222">Chat and stream via</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="238">5 providers</text><rect fill="#1a9556" fill-opacity="0.12" height="94" rx="8" stroke="#1a9556" stroke-width="1.25" width="136" x="312" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="380" y="88">Governance</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="104">P2, weeks 7-10</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="126">Keys, budgets,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="142">limits, cache</text><line stroke="#9aa3b2" stroke-width="1.25" x1="380" x2="380" y1="158" y2="168"></line><polygon fill="#ffffff" points="364,184 380,168 396,184 380,200" stroke="#1a9556" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="380" y="188">G2</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="222">Budgets enforced,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="238">cache hit-tested</text><rect fill="#3b4a6b" fill-opacity="0.12" height="94" rx="8" stroke="#3b4a6b" stroke-width="1.25" width="136" x="456" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="524" y="88">Dashboard</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="104">P3, weeks 11-14</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="126">Admin UI, traces,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="142">metrics, plugins</text><line stroke="#9aa3b2" stroke-width="1.25" x1="524" x2="524" y1="158" y2="168"></line><polygon fill="#ffffff" points="508,184 524,168 540,184 524,200" stroke="#3b4a6b" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="524" y="188">G3</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="222">Dashboard and</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="238">traces working</text><rect fill="#d6457f" fill-opacity="0.12" height="94" rx="8" stroke="#d6457f" stroke-width="1.25" width="136" x="600" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="668" y="88">Release</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="104">P4, weeks 15-16</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="126">Benchmarks, docs,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="142">v1.0 tagged</text><line stroke="#9aa3b2" stroke-width="1.25" x1="668" x2="668" y1="158" y2="168"></line><polygon fill="#ffffff" points="652,184 668,168 684,184 668,200" stroke="#d6457f" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="668" y="188">G4</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="222">Benchmarks public,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="238">v1.0 tagged</text></svg><figcaption>Phases 0 and 1 produce a working gateway. Governance, the dashboard and the release follow, each behind its own gate.</figcaption></figure><p>Week counts are estimates. They assume one developer and shift with team size. The v2 items in section 6 are planned after the v1.0 release.</p></section><section class="sec g-rose" id="s-14-risks-and-mitigations"><header class="sec-head"><span class="num">14</span><h2>Risks and Mitigations</h2></header><p>The biggest risks are gateway overhead, provider API drift and credential security, and each has a test or control planned in the first phases.</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gateway overhead misses the targets under load</td>
+<td>Adds latency to every request</td>
+<td>Benchmark in Phase 1, profile early, use uvloop and orjson, run multiple workers, try Granian</td>
+<td><span class="chip high">High</span></td>
+</tr>
+<tr>
+<td>Provider APIs change and break adapters</td>
+<td>Silent failures in production</td>
+<td>Contract tests with recorded fixtures, a nightly canary call per provider, versioned adapters</td>
+<td><span class="chip high">High</span></td>
+</tr>
+<tr>
+<td>Scope creep in provider coverage</td>
+<td>Late delivery</td>
+<td>Cap v1 at 10 providers. The OpenAI-compatible adapter covers many more.</td>
+<td><span class="chip medium">Medium</span></td>
+</tr>
+<tr>
+<td>Streaming edge cases: mid-stream errors, partial usage</td>
+<td>Billing and user-experience bugs</td>
+<td>Explicit stream state machine, chaos tests</td>
+<td><span class="chip medium">Medium</span></td>
+</tr>
+<tr>
+<td>Free-tier quota rules change</td>
+<td>Routing sends traffic to exhausted keys</td>
+<td>Quotas live in config, not code. Read remaining quota from response headers where providers offer it.</td>
+<td><span class="chip medium">Medium</span></td>
+</tr>
+<tr>
+<td>Stored provider keys are stolen</td>
+<td>Direct financial and trust damage</td>
+<td>Encryption at rest, no logging, least-privilege admin, rotation</td>
+<td><span class="chip high">High</span></td>
+</tr>
+<tr>
+<td>Slow adoption</td>
+<td>Few users or contributors</td>
+<td>Focus on a clear niche (free-tier routing and quota awareness), publish benchmarks and clear docs</td>
+<td><span class="chip medium">Medium</span></td>
+</tr>
+<tr>
+<td>Limited maintainer time</td>
+<td>Delays</td>
+<td>A strict v1 scope, automated CI, v2 deferred</td>
+<td><span class="chip medium">Medium</span></td>
+</tr>
+</tbody>
+</table></div></section><section class="sec g-rose" id="s-15-open-questions-and-assumptions"><header class="sec-head"><span class="num">15</span><h2>Open Questions and Assumptions</h2></header><p>Seven decisions need an answer before Phase 1 starts, and the first one shapes how much effort goes into docs and benchmarks.</p><h3>Open questions</h3><ul class="tasks">
+<li class="task">Is Prism a learning and portfolio project, an open-source product, or both?</li>
+<li class="task">Which two providers come first? Groq and Gemini are the natural free-tier pair.</li>
+<li class="task">SQLite and PostgreSQL both in v1, or PostgreSQL only?</li>
+<li class="task">Does the dashboard ship in v1.0, or follow in v1.1 once the API is stable? This draft ships it in v1.0.</li>
+<li class="task">Is the name Prism free to use? It is a common name, so check PyPI, GitHub and trademarks before publishing.</li>
+<li class="task">License: Apache-2.0 or MIT?</li>
+<li class="task">Contributions: a CLA or a DCO sign-off?</li>
+</ul><h3>Assumptions</h3><ul>
+<li>One developer builds v1, working steadily.</li>
+<li>Prism is self-hosted only. There is no managed offering in v1.</li>
+<li>Provider free tiers and prices change, so they are configuration and never hard-coded.</li>
+<li>Operators have Docker available. Redis and PostgreSQL are optional.</li>
+<li>OpenAI's chat completions format is the internal standard that adapters translate to and from.</li>
+</ul></section><section class="sec g-rose" id="s-glossary"><header class="sec-head"><span class="num dot"></span><h2>Glossary</h2></header><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gateway</td>
+<td>A proxy that gives applications one endpoint for many LLM providers</td>
+</tr>
+<tr>
+<td>Data plane</td>
+<td>The part that serves requests. Stateless and scalable.</td>
+</tr>
+<tr>
+<td>Control plane</td>
+<td>The part that manages configuration: admin API, dashboard, store</td>
+</tr>
+<tr>
+<td>Route</td>
+<td>A public model name, such as <code>fast-chat</code>, mapped to an ordered list of targets</td>
+</tr>
+<tr>
+<td>Target</td>
+<td>One provider, model and key pool a route can send traffic to</td>
+</tr>
+<tr>
+<td>Adapter</td>
+<td>Code that translates between Prism's format and one provider's API</td>
+</tr>
+<tr>
+<td>Virtual key</td>
+<td>A Prism-issued key with its own budget, limits and allowed routes</td>
+</tr>
+<tr>
+<td>Fallback chain</td>
+<td>The ordered targets tried when an earlier target fails</td>
+</tr>
+<tr>
+<td>Circuit breaker</td>
+<td>A guard that stops sending traffic to a failing target until it recovers</td>
+</tr>
+<tr>
+<td>Semantic cache</td>
+<td>A cache that matches requests by meaning, not exact text</td>
+</tr>
+<tr>
+<td>SSE</td>
+<td>Server-sent events, the streaming format used by chat APIs</td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>Model Context Protocol, a standard for giving models access to tools</td>
+</tr>
+<tr>
+<td>RPM, TPM</td>
+<td>Requests per minute, tokens per minute</td>
+</tr>
+<tr>
+<td>OTel</td>
+<td>OpenTelemetry, the standard for traces and metrics</td>
+</tr>
+</tbody>
+</table></div></section>
+</article>
+</main>
+</div>
+<script>
+(function () {
+  var links = document.querySelectorAll('.toc a');
+  var map = {};
+  links.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        links.forEach(function (a) { a.classList.remove('active'); });
+        if (map[e.target.id]) map[e.target.id].classList.add('active');
+      }
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  document.querySelectorAll('section.sec').forEach(function (s) { io.observe(s); });
+})();
+</script>
+</body>
+</html>

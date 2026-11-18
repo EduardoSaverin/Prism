@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push cancels the older run for the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pyright
+
+  test:
+    name: Tests and quickstart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      # Fails if coverage drops below 85% (set in pyproject.toml).
+      - run: uv run pytest
+      - name: Check the Postman collection is up to date
+        run: uv run python scripts/generate_postman.py --check
+      - name: Check the example config
+        run: uv run prism check-config config/prism.example.yaml
+      - name: Start the gateway and check that it answers
+        run: |
+          uv run prism serve --config config/prism.example.yaml --port 8000 &
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8000/readyz; then exit 0; fi
+            sleep 1
+          done
+          echo "The gateway did not start in 20 seconds" >&2
+          exit 1
