@@ -1,5 +1,5 @@
 [project]
-name = "prism-gateway"
+name = "prismgw"
 dynamic = ["version"]
 description = "Prism: an OpenAI-compatible AI gateway with routing, failover, caching, governance and tracing."
 readme = "README.md"

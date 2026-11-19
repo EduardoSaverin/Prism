@@ -553,7 +553,7 @@ wheels = [
 ]
 
 [[package]]
-name = "prism-gateway"
+name = "prismgw"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
