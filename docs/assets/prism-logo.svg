@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" width="520" height="360" role="img" aria-labelledby="title desc">
+  <title id="title">Prism</title>
+  <desc id="desc">A glass prism splitting a beam of light into coloured rays.</desc>
+  <style>
+    .line { stroke: #2d2f3e; }
+    @media (prefers-color-scheme: dark) {
+      .line { stroke: #d5d9e2; }
+    }
+  </style>
+
+  <g stroke-linejoin="round" stroke-linecap="round">
+    <!-- Glass: light front pane, darker back pane, one reflection -->
+    <path d="M230 30 L60 320 L400 320 Z" fill="#cfe9fb"/>
+    <path d="M263 202 L282 320 L400 320 L329 198 Z" fill="#a8d3f4"/>
+    <path d="M206 86 L150 182" stroke="#ffffff" stroke-width="10" opacity="0.8"/>
+    <path d="M300 240 L322 292" stroke="#ffffff" stroke-width="8" opacity="0.6"/>
+
+    <!-- Incoming beam and the light inside the glass -->
+    <path d="M8 78 L154 160 L124 210 L8 140 Z" fill="#f9e27d"/>
+    <path d="M8 96 L144 177 L136 190 L8 116 Z" fill="#fdf2bd"/>
+    <path d="M154 160 L315 175 L329 198 L124 210 Z" fill="#fde9a0" opacity="0.9"/>
+
+    <!-- Coloured rays fanning out of the right face -->
+    <path d="M315.0 175.0 L510 130 L510 165 L317.3 178.8 Z" fill="#e8403a"/>
+    <path d="M317.3 178.8 L510 165 L510 200 L319.7 182.7 Z" fill="#f28c28"/>
+    <path d="M319.7 182.7 L510 200 L510 235 L322.0 186.5 Z" fill="#f5c932"/>
+    <path d="M322.0 186.5 L510 235 L510 270 L324.3 190.3 Z" fill="#3fae52"/>
+    <path d="M324.3 190.3 L510 270 L510 305 L326.7 194.2 Z" fill="#3a7fdc"/>
+    <path d="M326.7 194.2 L510 305 L510 340 L329.0 198.0 Z" fill="#7b4fd0"/>
+
+    <!-- Outlines -->
+    <g class="line" fill="none" stroke-width="7">
+      <path d="M230 30 L60 320 L400 320 Z"/>
+      <path d="M263 202 L282 320"/>
+      <path d="M8 78 L154 160 M8 140 L124 210"/>
+      <path d="M154 160 L315 175 M124 210 L329 198"/>
+      <path d="M315 175 L510 130 L510 340 L329 198"/>
+      <!-- Motion lines -->
+      <path d="M40 34 L86 60 M78 22 L104 37 M14 176 L46 195"/>
+    </g>
+  </g>
+</svg>

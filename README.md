@@ -1,4 +1,10 @@
-# Prism
+<p align="center">
+  <img src="docs/assets/prism-logo.svg" alt="Hand-drawn prism splitting a beam of light into coloured rays" width="420">
+</p>
+
+<h1 align="center">Prism</h1>
+
+<p align="center"><i>One endpoint. Every model. Your keys, your servers.</i></p>
 
 **An OpenAI-compatible AI gateway.** Prism puts one endpoint in front of many LLM providers. It handles routing, failover, caching, governance and observability, so your applications don't have to.
 
