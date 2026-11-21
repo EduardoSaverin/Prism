@@ -26,6 +26,8 @@ routes:
     targets:
       - provider: groq
         model: <model-id>
+        # Optional: only use some of groq's keys for this target. Default: all of them.
+        # keys: [GROQ_KEY_1]
       - provider: gemini
         model: <model-id>
       - provider: local-ollama

@@ -58,6 +58,14 @@ def test_looking_up_an_unknown_provider_fails() -> None:
         (lambda d: d["routes"][0].update(retry={"max_retries": 99}), "max_retries"),
         (lambda d: d["providers"][0]["keys"][0].update(env="bad name"), "env"),
         (lambda d: d["providers"][0].update(id="Bad ID"), "id"),
+        (
+            lambda d: d["routes"][0]["targets"][0].update(keys=["GROQ_KEY_9"]),
+            "does not define: GROQ_KEY_9. Its keys: GROQ_KEY_1",
+        ),
+        (
+            lambda d: d["routes"][0]["targets"][0].update(keys=["GROQ_KEY_1", "GROQ_KEY_1"]),
+            "duplicate key in route 'fast', target groq/m",
+        ),
     ],
 )
 def test_bad_configs_are_rejected_with_a_clear_message(change: Any, message: str) -> None:
@@ -66,6 +74,22 @@ def test_bad_configs_are_rejected_with_a_clear_message(change: Any, message: str
     with pytest.raises(ConfigError) as caught:
         parse_config(data)
     assert message in str(caught.value)
+
+
+def test_a_target_may_use_some_of_its_providers_keys() -> None:
+    data = valid()
+    data["providers"][0]["keys"].append({"env": "GROQ_KEY_2"})
+    data["routes"][0]["targets"][0]["keys"] = ["GROQ_KEY_2"]
+    assert parse_config(data).routes[0].targets[0].keys == ("GROQ_KEY_2",)
+    assert parse_config(valid()).routes[0].targets[0].keys == ()  # default: all keys
+
+
+def test_a_target_of_a_keyless_provider_cannot_name_keys() -> None:
+    data = valid()
+    data["providers"] = [{"id": "local", "kind": "ollama", "base_url": "http://localhost:11434"}]
+    data["routes"][0]["targets"][0].update(provider="local", keys=["SOME_KEY"])
+    with pytest.raises(ConfigError, match="Its keys: none"):
+        parse_config(data)
 
 
 def test_local_providers_may_have_no_keys() -> None:

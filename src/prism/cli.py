@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import os
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -57,6 +61,55 @@ def _load_or_exit(path: Path) -> PrismConfig:
         raise typer.Exit(EXIT_BAD_CONFIG) from exc
 
 
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _database_url(url: str | None) -> str:
+    from prism.store.db import DEFAULT_DATABASE_URL
+
+    return url or os.environ.get("PRISM_DATABASE_URL") or DEFAULT_DATABASE_URL
+
+
+def _pepper_or_exit() -> str:
+    from prism.core.governance.keys import check_pepper
+
+    try:
+        return check_pepper(os.environ.get("PRISM_KEY_PEPPER"))
+    except ValueError as exc:
+        typer.echo(
+            f"{exc}\nSet it to a long random secret, for example the output of:\n"
+            "  python -c 'import secrets; print(secrets.token_urlsafe(32))'",
+            err=True,
+        )
+        raise typer.Exit(EXIT_MISSING_ENV) from exc
+
+
+def _require_migrated(url: str) -> None:
+    """Exit with a hint when the key tables do not exist yet."""
+    from sqlalchemy import create_engine, inspect
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from prism.store.migrate import to_sync_url
+
+    engine = create_engine(to_sync_url(url))
+    try:
+        ready = inspect(engine).has_table("virtual_keys")
+    except SQLAlchemyError as exc:
+        typer.echo(f"Cannot open the database: {exc}", err=True)
+        raise typer.Exit(EXIT_BAD_CONFIG) from exc
+    finally:
+        engine.dispose()
+    if not ready:
+        typer.echo("The database has no tables yet. Run: prism db-upgrade", err=True)
+        raise typer.Exit(EXIT_BAD_CONFIG)
+
+
 @app.command("serve")
 def serve(
     config: Annotated[
@@ -64,14 +117,40 @@ def serve(
     ] = None,
     host: Annotated[str, typer.Option(help="Address to listen on.")] = "127.0.0.1",
     port: Annotated[int, typer.Option(help="Port to listen on.")] = 8000,
+    no_auth: Annotated[
+        bool,
+        typer.Option(
+            "--no-auth",
+            help="Accept requests without a virtual key. Only allowed on a loopback host.",
+        ),
+    ] = False,
 ) -> None:
     """Start the gateway."""
     import uvicorn
 
-    from prism.main import create_app
+    from prism.main import build_governance, create_app
+
+    if no_auth and not _is_loopback(host):
+        typer.echo(
+            f"--no-auth is only allowed when listening on a loopback address, not '{host}'.",
+            err=True,
+        )
+        raise typer.Exit(EXIT_BAD_CONFIG)
 
     loaded = _load_or_exit(config) if config else None
-    uvicorn.run(create_app(loaded), host=host, port=port)
+    governance = None
+    if not no_auth:
+        _pepper_or_exit()
+        _require_migrated(_database_url(None))
+        governance = build_governance(os.environ)
+    try:
+        web_app = create_app(loaded, governance=governance, auth_disabled=no_auth)
+    except ConfigError as exc:
+        typer.echo(f"Config is not valid:\n{exc}", err=True)
+        raise typer.Exit(EXIT_BAD_CONFIG) from exc
+    if no_auth:
+        typer.echo("Warning: authentication is off. Every request is accepted.", err=True)
+    uvicorn.run(web_app, host=host, port=port)
 
 
 @app.command("check-config")
@@ -98,11 +177,213 @@ def db_upgrade(
     ] = None,
 ) -> None:
     """Create or update the database tables."""
-    from prism.store.db import DEFAULT_DATABASE_URL
     from prism.store.migrate import upgrade
 
-    upgrade(url or os.environ.get("PRISM_DATABASE_URL", DEFAULT_DATABASE_URL))
+    upgrade(_database_url(url))
     typer.echo("Database is up to date.")
+
+
+# ---------- Teams and virtual keys ----------
+
+teams_app = typer.Typer(help="Manage teams.", no_args_is_help=True)
+keys_app = typer.Typer(help="Manage virtual keys.", no_args_is_help=True)
+app.add_typer(teams_app, name="teams")
+app.add_typer(keys_app, name="keys")
+
+UrlOption = Annotated[
+    str | None, typer.Option("--url", help="Database URL (default: PRISM_DATABASE_URL).")
+]
+
+
+def _run_admin[T](url: str | None, action: Callable[[Any], Awaitable[T]]) -> T:
+    """Run one management action against the database, reporting errors cleanly."""
+    from prism.store.admin import AdminError
+    from prism.store.db import make_engine, make_session_factory
+
+    async def main() -> T:
+        engine = make_engine(_database_url(url))
+        try:
+            return await action(make_session_factory(engine))
+        finally:
+            await engine.dispose()
+
+    try:
+        return asyncio.run(main())
+    except AdminError as exc:
+        typer.echo(_with_hint(exc), err=True)
+        raise typer.Exit(EXIT_BAD_CONFIG) from exc
+
+
+def _with_hint(error: Exception) -> str:
+    """The error message, plus the command that fixes it when there is one."""
+    from prism.core.governance.teams import check_team_name
+    from prism.store.teams import TeamNotFoundError
+
+    if not isinstance(error, TeamNotFoundError):
+        return str(error)
+    try:
+        check_team_name(error.name)
+    except ValueError:
+        return f"{error} See the existing teams with: prism teams list"
+    # Valid team names only use characters that are safe to paste into a shell.
+    return f"{error} Create it with: prism teams create {error.name}"
+
+
+def _table(rows: list[list[str]]) -> str:
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    return "\n".join(
+        "  ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True)).rstrip()
+        for row in rows
+    )
+
+
+@teams_app.command("create")
+def teams_create(
+    name: Annotated[
+        str, typer.Argument(help="Unique team name: letters, digits, '.', '_' and '-'.")
+    ],
+    url: UrlOption = None,
+) -> None:
+    """Create a team."""
+    from prism.store.teams import create_team
+
+    team = _run_admin(url, lambda sessions: create_team(sessions, name))
+    typer.echo(f"Created team '{team.name}' ({team.id}).")
+
+
+@teams_app.command("list")
+def teams_list(url: UrlOption = None) -> None:
+    """List the teams."""
+    from prism.store.teams import list_teams
+
+    teams = _run_admin(url, list_teams)
+    if not teams:
+        typer.echo("No teams yet. Create one with: prism teams create <name>")
+        return
+    typer.echo(_table([["NAME", "ID"], *([t.name, t.id] for t in teams)]))
+
+
+def _check_routes(routes: list[str], config: Path | None) -> None:
+    """Refuse route names the config does not define. Warn when there is no config."""
+    if not routes:
+        return
+    if config is None:
+        typer.echo(
+            "Warning: the routes were not checked. Pass --config or set PRISM_CONFIG.",
+            err=True,
+        )
+        return
+    known = [route.name for route in _load_or_exit(config).routes]
+    unknown = [route for route in routes if route not in known]
+    if unknown:
+        typer.echo(
+            f"Unknown route: {', '.join(unknown)}. Routes in {config}: {', '.join(known)}",
+            err=True,
+        )
+        raise typer.Exit(EXIT_BAD_CONFIG)
+
+
+@keys_app.command("create")
+def keys_create(
+    team: Annotated[str, typer.Option("--team", help="Team that owns the key.")],
+    name: Annotated[
+        str, typer.Option("--name", help="A label, such as the app using it (1-128 characters).")
+    ],
+    routes: Annotated[
+        str | None,
+        typer.Option("--routes", help="Comma-separated routes the key may use. Default: all."),
+    ] = None,
+    expires_in_days: Annotated[
+        int | None, typer.Option("--expires-in-days", min=1, help="Expire after this many days.")
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            envvar="PRISM_CONFIG",
+            dir_okay=False,
+            help="Config file to check --routes against (default: PRISM_CONFIG).",
+        ),
+    ] = None,
+    url: UrlOption = None,
+) -> None:
+    """Create a virtual key. The key is shown once."""
+    from prism.store.keys import create_key
+
+    pepper = _pepper_or_exit()
+    allowed = [r.strip() for r in routes.split(",") if r.strip()] if routes else []
+    _check_routes(allowed, config)
+    expires_at = datetime.now(UTC) + timedelta(days=expires_in_days) if expires_in_days else None
+    created = _run_admin(
+        url,
+        lambda sessions: create_key(
+            sessions,
+            pepper=pepper,
+            team_name=team,
+            name=name,
+            routes=allowed,
+            expires_at=expires_at,
+        ),
+    )
+    typer.echo(f"Created key '{name}' for team '{team}' ({created.key.id}).")
+    typer.echo(f"Routes: {', '.join(allowed) if allowed else 'all'}")
+    if expires_at:
+        typer.echo(f"Expires: {expires_at:%Y-%m-%d %H:%M} UTC")
+    typer.echo("\nCopy the key now. It cannot be shown again:\n")
+    typer.echo(created.secret)
+
+
+@keys_app.command("list")
+def keys_list(
+    team: Annotated[str | None, typer.Option("--team", help="Only this team's keys.")] = None,
+    url: UrlOption = None,
+) -> None:
+    """List virtual keys. Secrets are never shown."""
+    from prism.store.keys import list_keys
+
+    listings = _run_admin(url, lambda sessions: list_keys(sessions, team))
+    if not listings:
+        typer.echo("No keys yet. Create one with: prism keys create --team <team> --name <name>")
+        return
+    rows = [["ID", "PREFIX", "NAME", "TEAM", "ROUTES", "STATUS"]]
+    for item in listings:
+        key = item.key
+        routes_text = ",".join(key.allowed_routes) or "all"
+        rows.append([key.id, key.key_prefix, key.name, item.team_name, routes_text, item.status])
+    typer.echo(_table(rows))
+
+
+@keys_app.command("revoke")
+def keys_revoke(
+    key: Annotated[str, typer.Argument(help="The key's id or its prefix (pk-prism-xxxx).")],
+    url: UrlOption = None,
+) -> None:
+    """Revoke a virtual key. It stops working on every instance within seconds."""
+    from prism.store.keys import revoke_key
+
+    revoked = _run_admin(url, lambda sessions: revoke_key(sessions, key))
+    redis_url = os.environ.get("PRISM_REDIS_URL")
+    if redis_url:
+        if asyncio.run(_evict_from_redis(redis_url, revoked.key_hash)):
+            typer.echo(f"Revoked key '{revoked.name}' ({revoked.id}). It stopped working now.")
+            return
+        typer.echo("Warning: could not reach Redis to evict the key.", err=True)
+    typer.echo(
+        f"Revoked key '{revoked.name}' ({revoked.id}). "
+        "Running instances stop accepting it within a few seconds."
+    )
+
+
+async def _evict_from_redis(url: str, key_hash: str) -> bool:
+    from prism.store.redis_cache import KEY_NAMESPACE, connect
+
+    client = connect(url)
+    try:
+        await client.delete(KEY_NAMESPACE + key_hash)
+        return True
+    except Exception:
+        return False
+    finally:
+        await client.aclose()
 
 
 if __name__ == "__main__":

@@ -40,24 +40,47 @@ jobs:
   test:
     name: Tests and quickstart
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: prism
+          POSTGRES_PASSWORD: prism
+          POSTGRES_DB: prism_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prism -d prism_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      PRISM_TEST_POSTGRES_URL: postgresql+asyncpg://prism:prism@localhost:5432/prism_test
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
       - run: uv sync --locked
-      # Fails if coverage drops below 85% (set in pyproject.toml).
+      # Runs the store tests on SQLite and PostgreSQL. Fails below 85% coverage.
       - run: uv run pytest
       - name: Check the Postman collection is up to date
         run: uv run python scripts/generate_postman.py --check
       - name: Check the example config
         run: uv run prism check-config config/prism.example.yaml
       - name: Start the gateway and check that it answers
+        env:
+          PRISM_DATABASE_URL: sqlite+aiosqlite:///./quickstart.db
+          PRISM_KEY_PEPPER: ci-only-pepper-not-a-secret-0123456789
         run: |
+          uv run prism db-upgrade
+          uv run prism teams create ci
+          KEY=$(uv run prism keys create --team ci --name quickstart | tail -1)
           uv run prism serve --config config/prism.example.yaml --port 8000 &
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8000/readyz; then exit 0; fi
+            if curl -fsS http://127.0.0.1:8000/readyz; then break; fi
+            if [ "$i" = 20 ]; then echo "The gateway did not start in 20 seconds" >&2; exit 1; fi
             sleep 1
           done
-          echo "The gateway did not start in 20 seconds" >&2
-          exit 1
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/v1/models)" = 401
+          curl -fsS -H "Authorization: Bearer $KEY" http://127.0.0.1:8000/v1/models

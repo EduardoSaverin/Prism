@@ -19,8 +19,10 @@ test:
 
 check: lint typecheck test postman-check
 
+ENV_FILE := $(if $(wildcard .env),--env-file .env,)
+
 run:
-	uv run prism serve --config config/prism.example.yaml
+	uv run $(ENV_FILE) prism serve --config $(or $(CONFIG),config/prism.example.yaml)
 
 postman:
 	uv run python scripts/generate_postman.py

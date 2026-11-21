@@ -92,6 +92,7 @@ code{font-family:var(--mono);font-size:.88em;background:#eef1f8;border-radius:4p
 ul.tasks{list-style:none;padding-left:0}
 li.task{display:flex;gap:12px;align-items:flex-start;margin:11px 0}
 li.task::before{content:"";flex:0 0 18px;height:18px;margin-top:4px;border:2px solid var(--accent);border-radius:5px}
+li.task.done::before{content:"\2713";background:var(--accent);color:#fff;font-size:13px;line-height:18px;text-align:center;font-weight:700}
 
 .codehilite{background:#f3f5fb;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;
   padding:14px 16px;overflow-x:auto;margin:16px 0}
@@ -110,6 +111,7 @@ figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);max-width:44em}
   .sheet{padding:26px 20px 40px}
   .hero h1{font-size:46px}
 }
+@page{size:A4;margin:16mm 14mm 18mm}
 @media print{
   body{background:#fff;font-size:11.5pt}
   .layout{display:block;max-width:none}
@@ -219,7 +221,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     <h1>Prism</h1>
     <p class="subtitle">Product Requirements Document</p>
     <p class="lead">Prism is an OpenAI-compatible AI gateway: one endpoint for many LLM providers, with routing, failover, caching, governance and tracing built in.</p>
-    <ul class="meta"><li>Draft for review</li><li>Nov 18, 2026</li><li>Owner: Sumit</li></ul>
+    <ul class="meta"><li>Version 0.2</li><li>Nov 18, 2026, updated Nov 21, 2026</li><li>Owner: Sumit</li></ul>
   </header>
   <section class="sec g-blue" id="s-summary"><header class="sec-head"><span class="num dot"></span><h2>Summary</h2></header><div class="table-wrap"><table>
 <thead>
@@ -235,7 +237,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td>Version</td>
-<td>0.1, draft for review</td>
+<td>0.2, updated with the decisions made during Phases 0 to 2</td>
 </tr>
 <tr>
 <td>Owner</td>
@@ -243,7 +245,11 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td>Repository</td>
-<td>/Users/macbook/Coding/Projects/Prism (empty, greenfield)</td>
+<td><a href="https://github.com/EduardoSaverin/Prism">https://github.com/EduardoSaverin/Prism</a></td>
+</tr>
+<tr>
+<td>Package</td>
+<td><code>prismgw</code> on PyPI. The command is <code>prism</code>.</td>
 </tr>
 <tr>
 <td>Language</td>
@@ -251,7 +257,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td>License</td>
-<td>Apache-2.0 (proposed)</td>
+<td>AGPL-3.0-only, with a commercial license available (<a href="https://github.com/EduardoSaverin/Prism/blob/main/docs/adr/0005-license-is-agpl-3.0.md">ADR 0005</a>)</td>
 </tr>
 <tr>
 <td>Scope of v1</td>
@@ -259,11 +265,12 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 </tbody>
 </table></div><div class="callout"><p>Read this first:</p><ul>
-<li>Prism starts from scratch in an empty repository.</li>
-<li>Every performance number here is a proposed target, to be validated by the Phase 1 benchmarks.</li>
-<li>Section 15 lists the open questions that need an answer before Phase 1 starts.</li>
+<li>This document is the target design for v1. The README describes what works today, and the <a href="https://github.com/users/EduardoSaverin/projects/3">project board</a> tracks the work left.</li>
+<li>Decisions made while building are recorded as ADRs in <code>docs/adr/</code>. Where an ADR and this document differ, the ADR wins.</li>
+<li>Every performance number here is a proposed target, to be validated by the benchmarks.</li>
+<li>Section 15 lists the open questions and the answers so far.</li>
 </ul></div></section><section class="sec g-blue" id="s-1-objective"><header class="sec-head"><span class="num">1</span><h2>Objective</h2></header><p>Prism gives teams one reliable, governed endpoint for all their LLM traffic.</p><h3>Problem</h3><p>Teams that call several LLM providers end up with provider SDKs spread through application code, no shared view of cost, and outages that take features down. A gateway centralises keys, routing, limits and monitoring, so applications talk to one stable endpoint and providers can change behind it.</p><h3>Vision</h3><p>Every LLM call in an organisation goes through Prism, and nobody notices when a provider fails.</p><h3>Goals</h3><ol>
-<li>One OpenAI-compatible endpoint for 10 providers at v1: OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI, GitHub Models and Ollama.</li>
+<li>One OpenAI-compatible endpoint for 9 providers at v1: OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI and Ollama, plus any OpenAI-compatible server. (GitHub Models was dropped: GitHub retired it on 2026-07-30.)</li>
 <li>Survive provider failures through retries, fallback chains and circuit breakers.</li>
 <li>Control cost and quota with virtual keys, budgets, rate limits and free-tier quota awareness.</li>
 <li>Be observable by default: Prometheus metrics, OpenTelemetry traces and per-request cost.</li>
@@ -551,28 +558,31 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tbody>
 </table></div></section><section class="sec g-indigo" id="s-5-low-level-design"><header class="sec-head"><span class="num">5</span><h2>Low-Level Design</h2></header><p>Three small contracts (provider adapter, plugin, routing policy) carry almost all of Prism's logic, so new providers and behaviours never touch the core.</p><h3>Repository layout</h3><div class="codehilite"><pre><span></span><code>Prism/
 ├── pyproject.toml
+├── config/prism.example.yaml
 ├── src/prism/
 │   ├── main.py              # app factory and startup
+│   ├── cli.py               # the prism command
+│   ├── config.py            # YAML config schema and loader
 │   ├── api/
-│   │   ├── openai.py        # /v1/chat/completions, /v1/embeddings, /v1/models
-│   │   ├── anthropic.py     # /v1/messages
-│   │   └── admin.py         # admin API
+│   │   ├── openai.py        # /v1/chat/completions, /v1/models (/v1/embeddings planned)
+│   │   ├── anthropic.py     # /v1/messages (planned)
+│   │   └── admin.py         # admin API (planned)
 │   ├── core/
 │   │   ├── types.py         # internal request, response and chunk types
-│   │   ├── pipeline.py      # runs a request through every stage
-│   │   ├── router.py        # builds the ordered target list
-│   │   ├── policies/        # priority, weighted, latency, cost, quota
-│   │   ├── resilience.py    # retries, backoff, circuit breaker
-│   │   └── errors.py        # error kinds and mapping
-│   ├── providers/           # one adapter per provider
-│   ├── plugins/             # guardrails, pii, cache
-│   ├── governance/          # keys, budgets, rate limits
-│   ├── store/               # database, migrations, config snapshot
-│   ├── telemetry/           # metrics, tracing, logging
+│   │   ├── gateway.py       # runs a request through routing, retries and fallback
+│   │   ├── policies/        # contract, one file per policy, registry
+│   │   ├── keys.py          # provider key pools
+│   │   ├── resilience.py    # backoff and circuit breaker
+│   │   ├── errors.py        # error kinds and mapping
+│   │   └── governance/      # virtual key and team rules (budgets and rate limits planned)
+│   ├── providers/           # one adapter per provider, and the registry
+│   ├── plugins/             # plugin contract (guardrails, PII, cache planned)
+│   ├── store/               # database models, migrations, team and key management
+│   ├── telemetry/           # metrics, tracing, logging (planned)
 │   └── mcp/                 # MCP gateway (v2)
-├── dashboard/               # Next.js admin UI
-├── tests/                   # unit, contract, integration, load
-├── deploy/                  # Dockerfile, compose.yaml, Helm chart
+├── dashboard/               # Next.js admin UI (planned)
+├── tests/                   # unit, contract, integration (load planned)
+├── deploy/                  # Dockerfile, compose.yaml, Helm chart (planned)
 └── docs/
 </code></pre></div><h3>Core contracts</h3><div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ProviderAdapter</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
@@ -598,7 +608,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="k">class</span><span class="w"> </span><span class="nc">RoutingPolicy</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">order</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Target</span><span class="p">],</span> <span class="n">ctx</span><span class="p">:</span> <span class="n">RequestContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Target</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the targets in the order they should be tried."""</span>
-</code></pre></div><h3>Data model</h3><div class="table-wrap"><table>
+</code></pre></div><h3>Data model</h3><p>This is the full v1 schema. The database only holds the tables that code already uses, and each feature adds its tables with its own migration (ADR 0011). Today that is <code>teams</code> and <code>virtual_keys</code>.</p><div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Table</th>
@@ -634,7 +644,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td><code>virtual_keys</code></td>
-<td><code>id</code>, <code>key_hash</code>, <code>team_id</code>, <code>allowed_routes</code>, <code>rpm</code>, <code>tpm</code>, <code>expires_at</code></td>
+<td><code>id</code>, <code>key_hash</code>, <code>key_prefix</code>, <code>name</code>, <code>team_id</code>, <code>allowed_routes</code>, <code>rpm</code>, <code>tpm</code>, <code>expires_at</code>, <code>revoked_at</code>, <code>created_at</code>, <code>updated_at</code></td>
 <td>Only the hash is stored</td>
 </tr>
 <tr>
@@ -720,8 +730,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tbody>
 </table></div><h3>Config schema (example values)</h3><div class="codehilite"><pre><span></span><code><span class="nt">providers</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">groq</span>
-<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openai_compatible</span>
-<span class="w">    </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://api.groq.com/openai/v1</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">groq</span>
 <span class="w">    </span><span class="nt">keys</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GROQ_KEY_1</span>
 <span class="w">        </span><span class="nt">weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
@@ -734,10 +743,11 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="w">    </span><span class="nt">targets</span><span class="p">:</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">groq</span>
 <span class="w">        </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;model-id&gt;</span>
+<span class="w">        </span><span class="nt">keys</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">GROQ_KEY_1</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># optional: only some of the provider's keys</span>
 <span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gemini</span>
 <span class="w">        </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;model-id&gt;</span>
 <span class="w">    </span><span class="nt">retry</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">max_attempts</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">max_retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
 <span class="w">      </span><span class="nt">backoff_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
 <span class="w">    </span><span class="nt">cache</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">exact</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
@@ -791,7 +801,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <tr>
 <td>Providers</td>
 <td>Free-tier set</td>
-<td>Cerebras, NVIDIA NIM, Cloudflare Workers AI, GitHub Models, Ollama</td>
+<td>Cerebras, NVIDIA NIM, Cloudflare Workers AI, Ollama</td>
 <td><span class="chip v1">v1</span></td>
 </tr>
 <tr>
@@ -815,7 +825,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <tr>
 <td>Routing</td>
 <td>Key pools</td>
-<td>Several keys per provider with weights and daily quotas</td>
+<td>Several keys per provider with weights and daily quotas. A route target can be limited to some of them (ADR 0012).</td>
 <td><span class="chip v1">v1</span></td>
 </tr>
 <tr>
@@ -1200,7 +1210,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>Check pub/sub or polling, then restart the worker</td>
 </tr>
 </tbody>
-</table></div></section><section class="sec g-orange" id="s-13-roadmap-and-milestones"><header class="sec-head"><span class="num">13</span><h2>Roadmap and Milestones</h2></header><p>Prism v1 ships in five phases over about 16 weeks, and each phase ends at a gate that must pass before the next one starts.</p><figure class="diagram"><svg aria-label="Five phases, each ending at a gate that must pass before the next starts" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="13" role="img" viewbox="0 0 760 264" xmlns="http://www.w3.org/2000/svg"><title>Five phases, each ending at a gate that must pass before the next starts</title><defs><marker id="road" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0L10 5L0 10z" fill="#9aa3b2"></path></marker></defs><text fill="#1f2937" font-size="15" font-weight="600" text-anchor="start" x="24" y="30">Five phases, and each one ends at a gate that must pass before the next starts</text><rect fill="#2563eb" fill-opacity="0.12" height="94" rx="8" stroke="#2563eb" stroke-width="1.25" width="136" x="24" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="92" y="88">Foundations</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="104">P0, weeks 1-2</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="126">Repo, CI, schemas,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="142">adapter contract</text><line stroke="#9aa3b2" stroke-width="1.25" x1="92" x2="92" y1="158" y2="168"></line><polygon fill="#ffffff" points="76,184 92,168 108,184 92,200" stroke="#2563eb" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="92" y="188">G0</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="222">CI green,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="238">contracts agreed</text><rect fill="#e4672b" fill-opacity="0.12" height="94" rx="8" stroke="#e4672b" stroke-width="1.25" width="136" x="168" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="236" y="88">Core gateway</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="104">P1, weeks 3-6</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="126">Chat, streaming,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="142">retries, fallback</text><line stroke="#9aa3b2" stroke-width="1.25" x1="236" x2="236" y1="158" y2="168"></line><polygon fill="#ffffff" points="220,184 236,168 252,184 236,200" stroke="#e4672b" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="236" y="188">G1</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="222">Chat and stream via</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="238">5 providers</text><rect fill="#1a9556" fill-opacity="0.12" height="94" rx="8" stroke="#1a9556" stroke-width="1.25" width="136" x="312" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="380" y="88">Governance</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="104">P2, weeks 7-10</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="126">Keys, budgets,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="142">limits, cache</text><line stroke="#9aa3b2" stroke-width="1.25" x1="380" x2="380" y1="158" y2="168"></line><polygon fill="#ffffff" points="364,184 380,168 396,184 380,200" stroke="#1a9556" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="380" y="188">G2</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="222">Budgets enforced,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="238">cache hit-tested</text><rect fill="#3b4a6b" fill-opacity="0.12" height="94" rx="8" stroke="#3b4a6b" stroke-width="1.25" width="136" x="456" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="524" y="88">Dashboard</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="104">P3, weeks 11-14</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="126">Admin UI, traces,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="142">metrics, plugins</text><line stroke="#9aa3b2" stroke-width="1.25" x1="524" x2="524" y1="158" y2="168"></line><polygon fill="#ffffff" points="508,184 524,168 540,184 524,200" stroke="#3b4a6b" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="524" y="188">G3</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="222">Dashboard and</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="238">traces working</text><rect fill="#d6457f" fill-opacity="0.12" height="94" rx="8" stroke="#d6457f" stroke-width="1.25" width="136" x="600" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="668" y="88">Release</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="104">P4, weeks 15-16</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="126">Benchmarks, docs,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="142">v1.0 tagged</text><line stroke="#9aa3b2" stroke-width="1.25" x1="668" x2="668" y1="158" y2="168"></line><polygon fill="#ffffff" points="652,184 668,168 684,184 668,200" stroke="#d6457f" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="668" y="188">G4</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="222">Benchmarks public,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="238">v1.0 tagged</text></svg><figcaption>Phases 0 and 1 produce a working gateway. Governance, the dashboard and the release follow, each behind its own gate.</figcaption></figure><p>Week counts are estimates. They assume one developer and shift with team size. The v2 items in section 6 are planned after the v1.0 release.</p></section><section class="sec g-rose" id="s-14-risks-and-mitigations"><header class="sec-head"><span class="num">14</span><h2>Risks and Mitigations</h2></header><p>The biggest risks are gateway overhead, provider API drift and credential security, and each has a test or control planned in the first phases.</p><div class="table-wrap"><table>
+</table></div></section><section class="sec g-orange" id="s-13-roadmap-and-milestones"><header class="sec-head"><span class="num">13</span><h2>Roadmap and Milestones</h2></header><p>Prism v1 ships in five phases over about 16 weeks, and each phase ends at a gate that must pass before the next one starts.</p><figure class="diagram"><svg aria-label="Five phases, each ending at a gate that must pass before the next starts" font-family="Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="13" role="img" viewbox="0 0 760 264" xmlns="http://www.w3.org/2000/svg"><title>Five phases, each ending at a gate that must pass before the next starts</title><defs><marker id="road" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="9" refy="5" viewbox="0 0 10 10"><path d="M0 0L10 5L0 10z" fill="#9aa3b2"></path></marker></defs><text fill="#1f2937" font-size="15" font-weight="600" text-anchor="start" x="24" y="30">Five phases, and each one ends at a gate that must pass before the next starts</text><rect fill="#2563eb" fill-opacity="0.12" height="94" rx="8" stroke="#2563eb" stroke-width="1.25" width="136" x="24" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="92" y="88">Foundations</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="104">P0, weeks 1-2</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="126">Repo, CI, schemas,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="142">adapter contract</text><line stroke="#9aa3b2" stroke-width="1.25" x1="92" x2="92" y1="158" y2="168"></line><polygon fill="#ffffff" points="76,184 92,168 108,184 92,200" stroke="#2563eb" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="92" y="188">G0</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="222">CI green,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="92" y="238">contracts agreed</text><rect fill="#e4672b" fill-opacity="0.12" height="94" rx="8" stroke="#e4672b" stroke-width="1.25" width="136" x="168" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="236" y="88">Core gateway</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="104">P1, weeks 3-6</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="126">Chat, streaming,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="142">retries, fallback</text><line stroke="#9aa3b2" stroke-width="1.25" x1="236" x2="236" y1="158" y2="168"></line><polygon fill="#ffffff" points="220,184 236,168 252,184 236,200" stroke="#e4672b" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="236" y="188">G1</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="222">Chat and stream via</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="236" y="238">5 providers</text><rect fill="#1a9556" fill-opacity="0.12" height="94" rx="8" stroke="#1a9556" stroke-width="1.25" width="136" x="312" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="380" y="88">Governance</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="104">P2, weeks 7-10</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="126">Keys, budgets,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="142">limits, cache</text><line stroke="#9aa3b2" stroke-width="1.25" x1="380" x2="380" y1="158" y2="168"></line><polygon fill="#ffffff" points="364,184 380,168 396,184 380,200" stroke="#1a9556" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="380" y="188">G2</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="222">Budgets enforced,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="380" y="238">cache hit-tested</text><rect fill="#3b4a6b" fill-opacity="0.12" height="94" rx="8" stroke="#3b4a6b" stroke-width="1.25" width="136" x="456" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="524" y="88">Dashboard</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="104">P3, weeks 11-14</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="126">Admin UI, traces,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="142">metrics, plugins</text><line stroke="#9aa3b2" stroke-width="1.25" x1="524" x2="524" y1="158" y2="168"></line><polygon fill="#ffffff" points="508,184 524,168 540,184 524,200" stroke="#3b4a6b" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="524" y="188">G3</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="222">Dashboard and</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="524" y="238">traces working</text><rect fill="#d6457f" fill-opacity="0.12" height="94" rx="8" stroke="#d6457f" stroke-width="1.25" width="136" x="600" y="64"></rect><text fill="#1f2937" font-size="13" font-weight="600" text-anchor="middle" x="668" y="88">Release</text><text fill="#5b6472" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="104">P4, weeks 15-16</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="126">Benchmarks, docs,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="142">v1.0 tagged</text><line stroke="#9aa3b2" stroke-width="1.25" x1="668" x2="668" y1="158" y2="168"></line><polygon fill="#ffffff" points="652,184 668,168 684,184 668,200" stroke="#d6457f" stroke-width="1.5"></polygon><text fill="#1f2937" font-size="11.5" font-weight="700" text-anchor="middle" x="668" y="188">G4</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="222">Benchmarks public,</text><text fill="#1f2937" font-size="11.5" font-weight="400" text-anchor="middle" x="668" y="238">v1.0 tagged</text></svg><figcaption>Phases 0 and 1 produce a working gateway. Governance, the dashboard and the release follow, each behind its own gate.</figcaption></figure><p>Week counts are estimates. They assume one developer and shift with team size. The v2 items in section 6 are planned after the v1.0 release.</p><p>Each phase is a <a href="https://github.com/EduardoSaverin/Prism/milestones">GitHub milestone</a>, and its work items are issues in that milestone. The <a href="https://github.com/users/EduardoSaverin/projects/3">project board</a> shows the status of every item by phase.</p></section><section class="sec g-rose" id="s-14-risks-and-mitigations"><header class="sec-head"><span class="num">14</span><h2>Risks and Mitigations</h2></header><p>The biggest risks are gateway overhead, provider API drift and credential security, and each has a test or control planned in the first phases.</p><div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Risk</th>
@@ -1259,14 +1269,14 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td><span class="chip medium">Medium</span></td>
 </tr>
 </tbody>
-</table></div></section><section class="sec g-rose" id="s-15-open-questions-and-assumptions"><header class="sec-head"><span class="num">15</span><h2>Open Questions and Assumptions</h2></header><p>Seven decisions need an answer before Phase 1 starts, and the first one shapes how much effort goes into docs and benchmarks.</p><h3>Open questions</h3><ul class="tasks">
-<li class="task">Is Prism a learning and portfolio project, an open-source product, or both?</li>
-<li class="task">Which two providers come first? Groq and Gemini are the natural free-tier pair.</li>
-<li class="task">SQLite and PostgreSQL both in v1, or PostgreSQL only?</li>
-<li class="task">Does the dashboard ship in v1.0, or follow in v1.1 once the API is stable? This draft ships it in v1.0.</li>
-<li class="task">Is the name Prism free to use? It is a common name, so check PyPI, GitHub and trademarks before publishing.</li>
-<li class="task">License: Apache-2.0 or MIT?</li>
-<li class="task">Contributions: a CLA or a DCO sign-off?</li>
+</table></div></section><section class="sec g-rose" id="s-15-open-questions-and-assumptions"><header class="sec-head"><span class="num">15</span><h2>Open Questions and Assumptions</h2></header><p>Seven decisions were open when this document was first written. Five are now answered.</p><h3>Open questions</h3><ul class="tasks">
+<li class="task"><span>Is Prism a learning and portfolio project, an open-source product, or both?</span></li>
+<li class="task done"><span>Which providers come first? All nine v1 providers got adapters in Phase 1. Groq and Gemini remain the free-tier pair for live checks.</span></li>
+<li class="task done"><span>SQLite and PostgreSQL both in v1, or PostgreSQL only? Both. SQLite is the default and CI also runs the database tests on PostgreSQL.</span></li>
+<li class="task"><span>Does the dashboard ship in v1.0, or follow in v1.1 once the API is stable? This draft ships it in v1.0.</span></li>
+<li class="task done"><span>Is the name Prism free to use? The project keeps the name Prism. The PyPI package is <code>prismgw</code>, because <code>prism-gateway</code> is taken. A trademark check is still to do.</span></li>
+<li class="task done"><span>License? AGPL-3.0-only, with a commercial license on request (ADR 0005).</span></li>
+<li class="task done"><span>Contributions: a CLA or a DCO sign-off? A CLA, because of the commercial license. Its text is still being prepared.</span></li>
 </ul><h3>Assumptions</h3><ul>
 <li>One developer builds v1, working steadily.</li>
 <li>Prism is self-hosted only. There is no managed offering in v1.</li>

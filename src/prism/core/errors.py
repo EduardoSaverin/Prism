@@ -19,6 +19,9 @@ class ErrorKind(StrEnum):
     AUTH_FAILED = "auth_failed"
     CONTENT_BLOCKED = "content_blocked"
     BUDGET_EXCEEDED = "budget_exceeded"
+    ROUTE_NOT_FOUND = "route_not_found"
+    UNAUTHENTICATED = "unauthenticated"
+    PERMISSION_DENIED = "permission_denied"
     INTERNAL_ERROR = "internal_error"
 
 
@@ -50,6 +53,15 @@ POLICIES: dict[ErrorKind, ErrorPolicy] = {
     ),
     ErrorKind.BUDGET_EXCEEDED: ErrorPolicy(
         False, False, 429, "rate_limit_error", "budget_exceeded"
+    ),
+    ErrorKind.ROUTE_NOT_FOUND: ErrorPolicy(
+        False, False, 404, "invalid_request_error", "model_not_found"
+    ),
+    ErrorKind.UNAUTHENTICATED: ErrorPolicy(
+        False, False, 401, "invalid_request_error", "invalid_api_key"
+    ),
+    ErrorKind.PERMISSION_DENIED: ErrorPolicy(
+        False, False, 403, "permission_error", "permission_denied"
     ),
     ErrorKind.INTERNAL_ERROR: ErrorPolicy(False, False, 500, "internal_error", "internal_error"),
 }

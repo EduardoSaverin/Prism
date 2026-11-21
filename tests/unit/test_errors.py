@@ -9,6 +9,9 @@ TABLE = [
     (ErrorKind.AUTH_FAILED, False, True, 502, "upstream_auth_failed"),
     (ErrorKind.CONTENT_BLOCKED, False, False, 400, "content_policy"),
     (ErrorKind.BUDGET_EXCEEDED, False, False, 429, "budget_exceeded"),
+    (ErrorKind.ROUTE_NOT_FOUND, False, False, 404, "model_not_found"),
+    (ErrorKind.UNAUTHENTICATED, False, False, 401, "invalid_api_key"),
+    (ErrorKind.PERMISSION_DENIED, False, False, 403, "permission_denied"),
     (ErrorKind.INTERNAL_ERROR, False, False, 500, "internal_error"),
 ]
 

@@ -37,7 +37,21 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """A chat completion request, in OpenAI format."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_schema_extra={
+            "examples": [
+                {
+                    "model": "fast-chat",
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": "Hello!"},
+                    ],
+                    "stream": False,
+                }
+            ]
+        },
+    )
 
     model: str
     messages: list[ChatMessage] = Field(min_length=1)
@@ -153,7 +167,9 @@ class Target(BaseModel, frozen=True):
 
     provider_id: str
     model: str
+    # The provider keys this target may use. Empty means all of them.
     key_ids: tuple[str, ...] = ()
+    weight: int = Field(default=1, ge=1)
 
 
 class ResolvedKey(BaseModel, frozen=True):

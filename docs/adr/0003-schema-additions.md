@@ -16,6 +16,7 @@ Other parts of the PRD need columns that its data model table does not list.
 
 ## Consequences
 
-- The first migration (`0001`) already includes them, so no later migration is needed.
+- `virtual_keys.key_prefix` and `virtual_keys.revoked_at` are in migration `0001`.
+  `budgets.mode` arrives with the budgets table ([0011](0011-schema-grows-with-the-code.md)).
 - A test fails if the models and the migration ever disagree.
 - The PRD data model table should be updated to list them.

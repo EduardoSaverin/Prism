@@ -1,6 +1,6 @@
 # Prism: Product Requirements Document
 
-Nov 18, 2026 · Sumit Kumar
+Nov 18, 2026 · Sumit Kumar · Updated Nov 21, 2026
 
 Prism is an OpenAI-compatible AI gateway: one endpoint for many LLM providers, with routing, failover, caching, governance and tracing built in.
 
@@ -9,18 +9,20 @@ Prism is an OpenAI-compatible AI gateway: one endpoint for many LLM providers, w
 | Field | Value |
 | --- | --- |
 | Product | Prism, an open-source AI gateway |
-| Version | 0.1, draft for review |
+| Version | 0.2, updated with the decisions made during Phases 0 to 2 |
 | Owner | Sumit |
-| Repository | /Users/macbook/Coding/Projects/Prism (empty, greenfield) |
+| Repository | https://github.com/EduardoSaverin/Prism |
+| Package | `prismgw` on PyPI. The command is `prism`. |
 | Language | Python 3.13 |
-| License | Apache-2.0 (proposed) |
+| License | AGPL-3.0-only, with a commercial license available ([ADR 0005](adr/0005-license-is-agpl-3.0.md)) |
 | Scope of v1 | Gateway, routing, governance, observability, admin dashboard. No hosted SaaS. |
 
 Read this first:
 
-- Prism starts from scratch in an empty repository.
-- Every performance number here is a proposed target, to be validated by the Phase 1 benchmarks.
-- Section 15 lists the open questions that need an answer before Phase 1 starts.
+- This document is the target design for v1. The README describes what works today, and the [project board](https://github.com/users/EduardoSaverin/projects/3) tracks the work left.
+- Decisions made while building are recorded as ADRs in [`docs/adr/`](adr/). Where an ADR and this document differ, the ADR wins.
+- Every performance number here is a proposed target, to be validated by the benchmarks.
+- Section 15 lists the open questions and the answers so far.
 
 ## 1. Objective
 
@@ -36,7 +38,7 @@ Every LLM call in an organisation goes through Prism, and nobody notices when a 
 
 ### Goals
 
-1. One OpenAI-compatible endpoint for 10 providers at v1: OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI, GitHub Models and Ollama.
+1. One OpenAI-compatible endpoint for 9 providers at v1: OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI and Ollama, plus any OpenAI-compatible server. (GitHub Models was dropped: GitHub retired it on 2026-07-30.)
 2. Survive provider failures through retries, fallback chains and circuit breakers.
 3. Control cost and quota with virtual keys, budgets, rate limits and free-tier quota awareness.
 4. Be observable by default: Prometheus metrics, OpenTelemetry traces and per-request cost.
@@ -182,31 +184,36 @@ Three small contracts (provider adapter, plugin, routing policy) carry almost al
 
 ### Repository layout
 
+Items marked "planned" do not exist yet.
+
 ```text
 Prism/
 ├── pyproject.toml
+├── config/prism.example.yaml
 ├── src/prism/
 │   ├── main.py              # app factory and startup
+│   ├── cli.py               # the prism command
+│   ├── config.py            # YAML config schema and loader
 │   ├── api/
-│   │   ├── openai.py        # /v1/chat/completions, /v1/embeddings, /v1/models
-│   │   ├── anthropic.py     # /v1/messages
-│   │   └── admin.py         # admin API
+│   │   ├── openai.py        # /v1/chat/completions, /v1/models (/v1/embeddings planned)
+│   │   ├── anthropic.py     # /v1/messages (planned)
+│   │   └── admin.py         # admin API (planned)
 │   ├── core/
 │   │   ├── types.py         # internal request, response and chunk types
-│   │   ├── pipeline.py      # runs a request through every stage
-│   │   ├── router.py        # builds the ordered target list
-│   │   ├── policies/        # priority, weighted, latency, cost, quota
-│   │   ├── resilience.py    # retries, backoff, circuit breaker
-│   │   └── errors.py        # error kinds and mapping
-│   ├── providers/           # one adapter per provider
-│   ├── plugins/             # guardrails, pii, cache
-│   ├── governance/          # keys, budgets, rate limits
-│   ├── store/               # database, migrations, config snapshot
-│   ├── telemetry/           # metrics, tracing, logging
+│   │   ├── gateway.py       # runs a request through routing, retries and fallback
+│   │   ├── policies/        # contract, one file per policy, registry
+│   │   ├── keys.py          # provider key pools
+│   │   ├── resilience.py    # backoff and circuit breaker
+│   │   ├── errors.py        # error kinds and mapping
+│   │   └── governance/      # virtual key and team rules (budgets and rate limits planned)
+│   ├── providers/           # one adapter per provider, and the registry
+│   ├── plugins/             # plugin contract (guardrails, PII, cache planned)
+│   ├── store/               # database models, migrations, team and key management
+│   ├── telemetry/           # metrics, tracing, logging (planned)
 │   └── mcp/                 # MCP gateway (v2)
-├── dashboard/               # Next.js admin UI
-├── tests/                   # unit, contract, integration, load
-├── deploy/                  # Dockerfile, compose.yaml, Helm chart
+├── dashboard/               # Next.js admin UI (planned)
+├── tests/                   # unit, contract, integration (load planned)
+├── deploy/                  # Dockerfile, compose.yaml, Helm chart (planned)
 └── docs/
 ```
 
@@ -241,14 +248,16 @@ class RoutingPolicy(Protocol):
 
 ### Data model
 
+This is the full v1 schema. The database only holds the tables that code already uses, and each feature adds its tables with its own migration ([ADR 0011](adr/0011-schema-grows-with-the-code.md)). Today that is `teams` and `virtual_keys`.
+
 | Table | Key columns | Notes |
 | --- | --- | --- |
 | `providers` | `id`, `kind`, `base_url`, `enabled` | One row per upstream provider |
 | `provider_keys` | `id`, `provider_id`, `secret_encrypted`, `weight`, `daily_quota`, `status` | Secrets encrypted at rest |
 | `routes` | `id`, `name`, `policy`, `config_json` | The public model name clients call |
-| `route_targets` | `route_id`, `position`, `provider_id`, `model`, `key_pool` | Ordered fallback chain |
+| `route_targets` | `route_id`, `position`, `provider_id`, `model`, `key_pool` | Ordered fallback chain. `key_pool` lists the provider keys the target may use; empty means all. |
 | `teams` | `id`, `name` | Owner of keys and budgets |
-| `virtual_keys` | `id`, `key_hash`, `team_id`, `allowed_routes`, `rpm`, `tpm`, `expires_at` | Only the hash is stored |
+| `virtual_keys` | `id`, `key_hash`, `key_prefix`, `name`, `team_id`, `allowed_routes`, `rpm`, `tpm`, `expires_at`, `revoked_at`, `created_at`, `updated_at` | Only an HMAC of the key is stored ([ADR 0008](adr/0008-virtual-keys.md)). `rpm` and `tpm` arrive with rate limits. |
 | `budgets` | `id`, `scope`, `limit_usd`, `period`, `reset_at`, `spent_usd` | Scope is a key or a team |
 | `usage_events` | `id`, `ts`, `request_id`, `key_id`, `route`, `provider`, `model`, `input_tokens`, `output_tokens`, `cost_usd`, `latency_ms`, `status`, `cache_hit` | Partitioned by day on PostgreSQL |
 | `plugin_configs` | `id`, `scope`, `plugin`, `position`, `config_json` | Order decides execution |
@@ -280,8 +289,7 @@ class RoutingPolicy(Protocol):
 ```yaml
 providers:
   - id: groq
-    kind: openai_compatible
-    base_url: https://api.groq.com/openai/v1
+    kind: groq
     keys:
       - env: GROQ_KEY_1
         weight: 2
@@ -294,10 +302,11 @@ routes:
     targets:
       - provider: groq
         model: <model-id>
+        keys: [GROQ_KEY_1]   # optional: only some of the provider's keys
       - provider: gemini
         model: <model-id>
     retry:
-      max_attempts: 2
+      max_retries: 2
       backoff_ms: 200
     cache:
       exact: true
@@ -316,11 +325,11 @@ Prism has 26 planned features: 21 in v1 and 5 in v2.
 | API | Multimodal input | Image and audio passthrough | v2 |
 | Providers | Core five | OpenAI, Anthropic, Gemini, Groq, Mistral | v1 |
 | Providers | OpenAI-compatible endpoints | vLLM, llama.cpp, LM Studio or any compatible server | v1 |
-| Providers | Free-tier set | Cerebras, NVIDIA NIM, Cloudflare Workers AI, GitHub Models, Ollama | v1 |
+| Providers | Free-tier set | Cerebras, NVIDIA NIM, Cloudflare Workers AI, Ollama | v1 |
 | Providers | Cloud platforms | Azure OpenAI, AWS Bedrock, Vertex AI | v2 |
 | Routing | Priority and weighted routes | Ordered or weighted target lists | v1 |
 | Routing | Retries, fallbacks, circuit breakers | Automatic recovery from provider failures | v1 |
-| Routing | Key pools | Several keys per provider with weights and daily quotas | v1 |
+| Routing | Key pools | Several keys per provider with weights and daily quotas. A route target can be limited to some of them ([ADR 0012](adr/0012-target-key-subsets.md)). | v1 |
 | Routing | Smart policies | Latency-, cost- and quota-aware routing | v1 |
 | Routing | Evaluation-driven routing | Pick targets by measured answer quality | v2 |
 | Governance | Virtual keys | Hashed keys tied to teams and allowed routes | v1 |
@@ -477,6 +486,8 @@ Phases 0 and 1 produce a working gateway. Governance, the dashboard and the rele
 
 Week counts are estimates. They assume one developer and shift with team size. The v2 items in section 6 are planned after the v1.0 release.
 
+Each phase is a [GitHub milestone](https://github.com/EduardoSaverin/Prism/milestones), and its work items are issues in that milestone. The [project board](https://github.com/users/EduardoSaverin/projects/3) shows the status of every item by phase.
+
 ## 14. Risks and Mitigations
 
 The biggest risks are gateway overhead, provider API drift and credential security, and each has a test or control planned in the first phases.
@@ -494,17 +505,17 @@ The biggest risks are gateway overhead, provider API drift and credential securi
 
 ## 15. Open Questions and Assumptions
 
-Seven decisions need an answer before Phase 1 starts, and the first one shapes how much effort goes into docs and benchmarks.
+Seven decisions were open when this document was first written. Five are now answered.
 
 ### Open questions
 
 - [ ] Is Prism a learning and portfolio project, an open-source product, or both?
-- [ ] Which two providers come first? Groq and Gemini are the natural free-tier pair.
-- [ ] SQLite and PostgreSQL both in v1, or PostgreSQL only?
+- [x] Which providers come first? All nine v1 providers got adapters in Phase 1. Groq and Gemini remain the free-tier pair for live checks.
+- [x] SQLite and PostgreSQL both in v1, or PostgreSQL only? Both. SQLite is the default and CI also runs the database tests on PostgreSQL.
 - [ ] Does the dashboard ship in v1.0, or follow in v1.1 once the API is stable? This draft ships it in v1.0.
-- [ ] Is the name Prism free to use? It is a common name, so check PyPI, GitHub and trademarks before publishing.
-- [ ] License: Apache-2.0 or MIT?
-- [ ] Contributions: a CLA or a DCO sign-off?
+- [x] Is the name Prism free to use? The project keeps the name Prism. The PyPI package is `prismgw`, because `prism-gateway` is taken. A trademark check is still to do.
+- [x] License? AGPL-3.0-only, with a commercial license on request ([ADR 0005](adr/0005-license-is-agpl-3.0.md)).
+- [x] Contributions: a CLA or a DCO sign-off? A CLA, because of the commercial license. Its text is still being prepared.
 
 ### Assumptions
 

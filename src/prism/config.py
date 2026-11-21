@@ -67,6 +67,11 @@ class ProviderConfig(_Strict):
     def _check_provider(self) -> Self:
         if self.kind is ProviderKind.OPENAI_COMPATIBLE and not self.base_url:
             raise ValueError("base_url is required for openai_compatible providers")
+        if self.kind is ProviderKind.CLOUDFLARE and not self.base_url:
+            raise ValueError(
+                "base_url is required for cloudflare providers: "
+                "https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1"
+            )
         if self.base_url and not self.base_url.startswith(("http://", "https://")):
             raise ValueError("base_url must start with http:// or https://")
         if self.kind not in _KEYLESS_KINDS and not self.keys:
@@ -78,6 +83,8 @@ class TargetConfig(_Strict):
     provider: str
     model: str
     weight: int = Field(default=1, ge=1)
+    # Env names of the provider keys this target may use. Empty means all of them.
+    keys: tuple[str, ...] = ()
 
 
 class RetryConfig(_Strict):
@@ -100,9 +107,15 @@ class RouteConfig(_Strict):
     fallback_on_content_blocked: bool = False
 
 
+class CircuitBreakerConfig(_Strict):
+    failure_threshold: int = Field(default=5, ge=1)
+    cooldown_s: float = Field(default=30.0, gt=0)
+
+
 class PrismConfig(_Strict):
     providers: tuple[ProviderConfig, ...] = Field(min_length=1)
     routes: tuple[RouteConfig, ...] = Field(min_length=1)
+    circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
 
     @model_validator(mode="after")
     def _check_links(self) -> Self:
@@ -116,6 +129,7 @@ class PrismConfig(_Strict):
                     raise ValueError(
                         f"route '{route.name}' uses unknown provider '{target.provider}'"
                     )
+                _check_target_keys(route.name, target, self.provider(target.provider))
         return self
 
     def provider(self, provider_id: str) -> ProviderConfig:
@@ -123,6 +137,22 @@ class PrismConfig(_Strict):
             if item.id == provider_id:
                 return item
         raise KeyError(provider_id)
+
+
+def _check_target_keys(route: str, target: TargetConfig, provider: ProviderConfig) -> None:
+    """A target may only name keys that its provider defines, each once."""
+    if not target.keys:
+        return
+    where = f"route '{route}', target {provider.id}/{target.model}"
+    _reject_duplicates(f"key in {where}", list(target.keys))
+    defined = [key.env for key in provider.keys]
+    unknown = [env for env in target.keys if env not in defined]
+    if unknown:
+        choices = ", ".join(defined) if defined else "none"
+        raise ValueError(
+            f"{where} uses keys that provider '{provider.id}' does not define: "
+            f"{', '.join(unknown)}. Its keys: {choices}"
+        )
 
 
 def _reject_duplicates(label: str, values: list[str]) -> None:
