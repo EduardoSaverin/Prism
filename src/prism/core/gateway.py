@@ -26,6 +26,7 @@ from prism.core.keys import KeyPool, NoUsableKeyError, key_id
 from prism.core.policies.base import RoutingPolicy
 from prism.core.policies.latency import LatencyTracker
 from prism.core.policies.registry import make_policy
+from prism.core.pricing import PriceBook, build_price_book
 from prism.core.resilience import (
     BreakerRegistry,
     BreakerState,
@@ -41,6 +42,7 @@ from prism.core.types import (
     Delta,
     ResolvedKey,
     Target,
+    Usage,
 )
 from prism.plugins.base import Plugin, Reject, ShortCircuit
 from prism.providers.base import ProviderAdapter
@@ -97,6 +99,7 @@ class Gateway:
         *,
         breakers: BreakerRegistry | None = None,
         tracker: LatencyTracker | None = None,
+        prices: PriceBook | None = None,
         plugins: Sequence[Plugin] = (),
         sleep: Sleep = asyncio.sleep,
         clock: Clock = time.monotonic,
@@ -110,6 +113,7 @@ class Gateway:
             config.circuit_breaker.failure_threshold, config.circuit_breaker.cooldown_s, clock
         )
         self.tracker = tracker or LatencyTracker()
+        self.prices = build_price_book(config) if prices is None else prices
         self.plugins = tuple(plugins)
         self.sleep = sleep
         self.clock = clock
@@ -159,6 +163,7 @@ class Gateway:
 
         response, target, attempts = await self._run(route, ctx, call)
         self._record_success(target, ctx)
+        self._record_cost(target, response.usage, ctx)
         response.model = req.model
         for plugin in self.plugins:
             await plugin.after_response(ctx, response)
@@ -208,7 +213,7 @@ class Gateway:
         try:
             async for chunk in _prepend(first, iterator):
                 if chunk.usage is not None:
-                    ctx.metadata["usage"] = chunk.usage
+                    self._record_cost(target, chunk.usage, ctx)
                     if not want_usage:
                         chunk.usage = None
                 chunk.model = req.model
@@ -396,6 +401,12 @@ class Gateway:
         latency = ctx.metadata.get("upstream_latency_s")
         if isinstance(latency, float):
             self.tracker.record(target, latency)
+
+    def _record_cost(self, target: Target, usage: Usage | None, ctx: RequestContext) -> None:
+        if usage is None:
+            return
+        ctx.usage = usage
+        ctx.cost_usd = self.prices.cost(target.provider_id, target.model, usage)
 
 
 async def _close(iterator: AsyncIterator[ChatChunk]) -> None:

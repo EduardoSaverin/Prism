@@ -88,6 +88,18 @@ async def test_chat_completion_returns_the_answer_and_prism_headers() -> None:
     assert response.headers["x-prism-cache"] == "miss"
 
 
+async def test_the_cost_is_not_sent_to_the_client() -> None:
+    config = config_for(["a"], [route("chat", "a")])
+    config["providers"][0]["prices"] = {"a-model": {"input": 1, "output": 1}}
+    h = build(config, {"a": ScriptedAdapter("a")})
+    app = create_app(h.gateway.config, gateway=h.gateway, auth_disabled=True)
+    async with client_for(app) as client:
+        response = await client.post("/v1/chat/completions", json=BODY)
+    assert response.status_code == 200
+    assert not any("cost" in name for name in response.headers)
+    assert "cost" not in response.text
+
+
 async def test_an_unsafe_request_id_is_replaced() -> None:
     async with client_for(app_with(ScriptedAdapter("a"))) as client:
         response = await client.post(

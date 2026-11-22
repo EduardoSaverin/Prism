@@ -5,9 +5,10 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
-from prism.core.types import ChatRequest
+from prism.core.types import ChatRequest, Usage
 
 
 @dataclass
@@ -21,6 +22,9 @@ class RequestContext:
     team_id: str | None = None
     attempt: int = 0
     started_at: float = field(default_factory=time.monotonic)
+    # Set once the provider reports token usage. No usage means no cost.
+    usage: Usage | None = None
+    cost_usd: Decimal | None = None
     metadata: dict[str, Any] = field(default_factory=lambda: {})
 
     def elapsed_s(self) -> float:

@@ -28,6 +28,14 @@ latency, and usage data is also useful to systems outside Prism.
   enforced from live counters (ADR 0009), not from usage records, so a lost
   record affects reports, never enforcement.
 
+## Implementation notes
+
+- Prices are `Decimal`, so costs are exact. `core/pricing.py` holds `ModelPrice`,
+  `PriceBook` and `build_price_book`; the gateway sets `RequestContext.usage` and
+  `RequestContext.cost_usd` from the target that answered.
+- The cost is not sent to clients (no response header). It stays inside Prism for
+  usage records and budgets.
+
 ## Consequences
 
 - An instance crash can lose up to about one second of usage records with the

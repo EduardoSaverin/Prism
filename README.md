@@ -29,6 +29,7 @@ Teams that use several LLM providers often end up with provider SDKs scattered t
 | Providers | OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI, Ollama, and any OpenAI-compatible server (vLLM, llama.cpp, LM Studio) |
 | Routing | Priority, weighted, round-robin and latency policies. Retries with backoff and jitter, fallback chains, a circuit breaker per target. Weighted key pools, optionally limited per target. |
 | Governance | Teams and hashed virtual keys with allowed routes, expiry and revocation, managed with the CLI. Optional Redis cache shared by instances. |
+| Cost | Model prices in the config and a US dollar cost for every request, from its token usage |
 | Storage | SQLite or PostgreSQL, with Alembic migrations |
 
 The full product specification is in the [product requirements document](docs/PRD.md).
@@ -124,6 +125,8 @@ providers:
         weight: 2
       - env: GROQ_KEY_2
         weight: 1
+    prices:                # US dollars per million tokens
+      <model-id>: { input: 0.59, output: 0.79 }
 
 routes:
   - name: fast-chat        # clients send this as the model name
@@ -173,6 +176,17 @@ Every provider also accepts `base_url` (to override the default) and `timeout_s`
 | `circuit_breaker.cooldown_s` | top level | `30` | Time before a skipped target gets one probe request |
 
 A key that fails authentication is disabled. A rate-limited key rests for its `Retry-After`, and another key in the pool is used. Key health is shared: a target limited to some keys sees the same disabled and resting keys as every other target of that provider. When none of a target's keys is usable, the next target is tried. Streams fall back only before the first chunk; after that, a failure ends the stream with an error event. The route `cache` settings are accepted but have no effect yet.
+
+### Prices
+
+Each provider can list `prices` by model name, in US dollars per million input and output tokens. Prism multiplies a request's token usage by its model's price, using exact decimal arithmetic. The price is the one for the target that actually answered, after any fallback.
+
+- A model with no price costs $0. Prism logs one warning the first time it sees it. To silence the warning for a free local model, give it a price of `{ input: 0, output: 0 }`.
+- A response with no token usage gets no cost.
+- The cost is kept inside Prism for usage records and budgets. It is not sent to clients.
+- Answers served by a plugin, such as a future cache, cost nothing.
+
+Prices change, so check each provider's pricing page. Prism never hard-codes them.
 
 ### Virtual keys
 
@@ -323,7 +337,7 @@ An adapter is complete when it passes the full contract suite.
 ```text
 src/prism/
 ├── api/           HTTP routes (/v1/chat/completions, /v1/models)
-├── core/          types, errors, gateway pipeline, key pools, circuit breakers
+├── core/          types, errors, gateway pipeline, key pools, circuit breakers, pricing
 │   ├── policies/      routing policy contract, one file per policy, and the registry that picks one
 │   └── governance/    virtual key and team rules, key hashing, cache and authentication
 ├── providers/     adapter contract, OpenAI-compatible, Anthropic and Gemini adapters, registry

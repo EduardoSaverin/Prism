@@ -1,4 +1,6 @@
 from collections.abc import AsyncIterator
+from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -280,7 +282,7 @@ async def test_stream_usage_is_measured_but_only_sent_when_asked() -> None:
     chunks = await collect((await h.gateway.stream(req, ctx)).chunks)
     assert all(c.usage is None for c in chunks)
     assert a.calls[0].request.wants_stream_usage
-    assert ctx.metadata["usage"] == Usage(prompt_tokens=10, completion_tokens=5)
+    assert ctx.usage == Usage(prompt_tokens=10, completion_tokens=5)
 
     asked = chat_request(stream=True, usage=True)
     chunks = await collect((await h.gateway.stream(asked, ctx_for(asked))).chunks)
@@ -344,3 +346,62 @@ async def test_closing_the_gateway_closes_adapters() -> None:
     h = build(config_for(["a"], [route("chat", "a")]), {"a": a})
     await h.gateway.aclose()
     assert a.closed
+
+
+def _priced(*providers: str) -> dict[str, Any]:
+    config = config_for(list(providers), [route("chat", *providers)])
+    for entry in config["providers"]:
+        entry["prices"] = {f"{entry['id']}-model": {"input": 2, "output": 6}}
+    return config
+
+
+async def test_a_request_gets_a_cost_from_its_usage() -> None:
+    h = build(_priced("a"), {"a": ScriptedAdapter("a")})
+    req = chat_request()
+    ctx = ctx_for(req)
+    await h.gateway.chat(req, ctx)
+    # 10 input tokens at $2/M plus 5 output tokens at $6/M
+    assert ctx.usage == Usage(prompt_tokens=10, completion_tokens=5)
+    assert ctx.cost_usd == Decimal("0.00005")
+
+
+async def test_the_cost_uses_the_target_that_answered() -> None:
+    config = _priced("a", "b")
+    config["providers"][1]["prices"] = {"b-model": {"input": 10, "output": 10}}
+    a = ScriptedAdapter("a", errors=[FakeProviderError(401)])
+    h = build(config, {"a": a, "b": ScriptedAdapter("b")})
+    req = chat_request()
+    ctx = ctx_for(req)
+    await h.gateway.chat(req, ctx)
+    assert ctx.cost_usd == Decimal("0.00015")
+
+
+async def test_a_stream_gets_a_cost_even_when_the_caller_hides_usage() -> None:
+    h = build(_priced("a"), {"a": ScriptedAdapter("a")})
+    req = chat_request(stream=True)
+    ctx = ctx_for(req)
+    chunks = await collect((await h.gateway.stream(req, ctx)).chunks)
+    assert all(c.usage is None for c in chunks)
+    assert ctx.cost_usd == Decimal("0.00005")
+
+
+async def test_an_unpriced_model_costs_nothing() -> None:
+    h = build(config_for(["a"], [route("chat", "a")]), {"a": ScriptedAdapter("a")})
+    req = chat_request()
+    ctx = ctx_for(req)
+    await h.gateway.chat(req, ctx)
+    assert ctx.cost_usd == 0
+
+
+async def test_an_answer_from_a_plugin_has_no_cost() -> None:
+    cached = ChatResponse(
+        model="chat",
+        choices=[Choice(message=ChatMessage(role="assistant", content="cached"))],
+        usage=Usage(prompt_tokens=10, completion_tokens=5),
+    )
+    h = build(_priced("a"), {"a": ScriptedAdapter("a")})
+    h.gateway.plugins = (_Plugin(ShortCircuit(cached)),)
+    req = chat_request()
+    ctx = ctx_for(req)
+    await h.gateway.chat(req, ctx)
+    assert (ctx.usage, ctx.cost_usd) == (None, None)

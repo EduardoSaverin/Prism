@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
@@ -56,15 +57,26 @@ class KeyConfig(_Strict):
     daily_quota: int | None = Field(default=None, ge=1)
 
 
+class PriceConfig(_Strict):
+    """What one model costs, in US dollars per million tokens."""
+
+    input: Decimal = Field(ge=0, allow_inf_nan=False)
+    output: Decimal = Field(ge=0, allow_inf_nan=False)
+
+
 class ProviderConfig(_Strict):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")
     kind: ProviderKind
     base_url: str | None = None
     keys: tuple[KeyConfig, ...] = ()
     timeout_s: float = Field(default=60.0, gt=0)
+    # Prices by model name, as the provider names its models.
+    prices: dict[str, PriceConfig] = Field(default_factory=lambda: {})
 
     @model_validator(mode="after")
     def _check_provider(self) -> Self:
+        if any(not model.strip() for model in self.prices):
+            raise ValueError("a price needs a model name")
         if self.kind is ProviderKind.OPENAI_COMPATIBLE and not self.base_url:
             raise ValueError("base_url is required for openai_compatible providers")
         if self.kind is ProviderKind.CLOUDFLARE and not self.base_url:

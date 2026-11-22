@@ -9,6 +9,10 @@ providers:
         weight: 2
       - env: GROQ_KEY_2
         weight: 1
+    # US dollars per million tokens, by model name. Unpriced models cost $0.
+    # Check the provider's pricing page: prices change.
+    prices:
+      <model-id>: { input: 0.59, output: 0.79 }
 
   - id: gemini
     kind: gemini
@@ -18,6 +22,9 @@ providers:
   - id: local-ollama
     kind: ollama
     base_url: http://localhost:11434
+    # Local models are free. A zero price also stops the "no price" warning.
+    prices:
+      <model-id>: { input: 0, output: 0 }
 
 routes:
   # Callers use the route name as the model name, for example model="fast-chat".

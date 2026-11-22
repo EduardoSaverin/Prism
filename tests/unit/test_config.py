@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,14 @@ def test_looking_up_an_unknown_provider_fails() -> None:
             lambda d: d["routes"][0]["targets"][0].update(keys=["GROQ_KEY_1", "GROQ_KEY_1"]),
             "duplicate key in route 'fast', target groq/m",
         ),
+        (lambda d: d["providers"][0].update(prices={"m": {"input": -1, "output": 1}}), "input"),
+        (lambda d: d["providers"][0].update(prices={"m": {"input": 1}}), "output"),
+        (lambda d: d["providers"][0].update(prices={"m": {"input": "nan", "output": 1}}), "input"),
+        (
+            lambda d: d["providers"][0].update(prices={"m": {"input": 1, "output": 1, "x": 1}}),
+            "x",
+        ),
+        (lambda d: d["providers"][0].update(prices={" ": {"input": 1, "output": 1}}), "model name"),
     ],
 )
 def test_bad_configs_are_rejected_with_a_clear_message(change: Any, message: str) -> None:
@@ -74,6 +83,14 @@ def test_bad_configs_are_rejected_with_a_clear_message(change: Any, message: str
     with pytest.raises(ConfigError) as caught:
         parse_config(data)
     assert message in str(caught.value)
+
+
+def test_prices_are_exact_decimals_per_model() -> None:
+    data = valid()
+    data["providers"][0]["prices"] = {"m": {"input": 0.59, "output": "0.79"}}
+    price = parse_config(data).provider("groq").prices["m"]
+    assert (price.input, price.output) == (Decimal("0.59"), Decimal("0.79"))
+    assert parse_config(valid()).provider("groq").prices == {}
 
 
 def test_a_target_may_use_some_of_its_providers_keys() -> None:
