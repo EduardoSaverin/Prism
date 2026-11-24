@@ -36,15 +36,18 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     engine = create_engine(_url(), poolclass=pool.NullPool)
-    with engine.connect() as connection:
+    with engine.begin() as connection:
+        if connection.dialect.name == "sqlite":
+            # SQLite's legacy transaction mode does not begin a transaction for DDL.
+            # Keep schema changes, data copies, and the revision update atomic.
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
             compare_type=True,
         )
-        with context.begin_transaction():
-            context.run_migrations()
+        context.run_migrations()
 
 
 if context.is_offline_mode():

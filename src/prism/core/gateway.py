@@ -238,6 +238,7 @@ class Gateway:
             if isinstance(decision, Reject):
                 raise decision.error
             if isinstance(decision, ShortCircuit):
+                ctx.cache_hit = True
                 return decision.response
         return None
 
@@ -289,7 +290,7 @@ class Gateway:
 
                 attempts.count += 1
                 ctx.attempt = attempts.count
-                ctx.metadata["provider"] = target.provider_id
+                ctx.target = target
                 started = self.clock()
                 try:
                     result = await call(adapter, target, key)

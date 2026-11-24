@@ -8,7 +8,7 @@ import pytest
 from prism.store.admin import AdminError, Sessions
 from prism.store.db import make_engine, make_session_factory
 from prism.store.migrate import upgrade
-from prism.store.teams import TeamNotFoundError, create_team, list_teams, team_by_name
+from prism.store.team_admin import TeamNotFoundError, create_team, list_teams, team_by_name
 
 
 @pytest.fixture

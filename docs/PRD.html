@@ -654,8 +654,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </tr>
 <tr>
 <td><code>usage_events</code></td>
-<td><code>id</code>, <code>ts</code>, <code>request_id</code>, <code>key_id</code>, <code>route</code>, <code>provider</code>, <code>model</code>, <code>input_tokens</code>, <code>output_tokens</code>, <code>cost_usd</code>, <code>latency_ms</code>, <code>status</code>, <code>cache_hit</code></td>
-<td>Partitioned by day on PostgreSQL</td>
+<td><code>id</code>, <code>ts</code>, <code>request_id</code>, <code>key_id</code>, <code>team_id</code>, <code>route</code>, <code>provider</code>, <code>model</code>, <code>input_tokens</code>, <code>output_tokens</code>, <code>cost_usd</code>, <code>latency_ms</code>, <code>status</code>, <code>cache_hit</code>, <code>attempts</code></td>
+<td>Built (migration <code>0002</code>). Partitioning by day on PostgreSQL is planned.</td>
 </tr>
 <tr>
 <td><code>plugin_configs</code></td>

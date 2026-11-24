@@ -16,21 +16,16 @@ from prism.core.governance.keys import (
     KeyRecord,
     hash_key,
 )
-from prism.main import build_governance
+from prism.core.governance.watcher import KeyChangeWatcher
+from prism.main import build_governance, connect_database
 from prism.store.admin import AdminError, Sessions
 from prism.store.db import make_engine, make_session_factory
-from prism.store.keys import (
-    KeyChangeWatcher,
-    KeyListing,
-    SqlKeyLookup,
-    create_key,
-    list_keys,
-    revoke_key,
-)
+from prism.store.key_admin import KeyListing, create_key, list_keys, revoke_key
+from prism.store.keys import SqlKeyChangeSource, SqlKeyLookup
 from prism.store.migrate import upgrade
 from prism.store.models import VirtualKey
 from prism.store.redis_cache import KEY_NAMESPACE, RedisKeyCache
-from prism.store.teams import create_team
+from prism.store.team_admin import create_team
 
 PEPPER = "p" * 32
 
@@ -131,29 +126,35 @@ def test_listing_status_handles_naive_dates() -> None:
     assert KeyListing(key, "t").status == "expired"
 
 
-async def test_the_watcher_evicts_changed_keys(sessions: Sessions) -> None:
+async def test_the_change_source_lists_keys_changed_since_a_moment(sessions: Sessions) -> None:
+    await create_team(sessions, "ml")
+    created = await create_key(sessions, pepper=PEPPER, team_name="ml", name="a")
+    key_hash = hash_key(created.secret, PEPPER)
+    source = SqlKeyChangeSource(sessions)
+    before = datetime.now(UTC) - timedelta(minutes=1)
+
+    [change] = await source.changed_since(before)
+    assert change.key_hash == key_hash
+    assert change.updated_at.tzinfo is not None  # SQLite's naive dates come back as UTC
+    assert await source.changed_since(datetime.now(UTC) + timedelta(minutes=1)) == []
+
+    await revoke_key(sessions, created.key.id)
+    [revoked] = await source.changed_since(change.updated_at + timedelta(microseconds=1))
+    assert revoked.key_hash == key_hash
+
+
+async def test_the_watcher_evicts_a_key_revoked_in_the_database(sessions: Sessions) -> None:
     await create_team(sessions, "ml")
     created = await create_key(sessions, pepper=PEPPER, team_name="ml", name="a")
     key_hash = hash_key(created.secret, PEPPER)
     cache = InMemoryKeyCache()
-    watcher = KeyChangeWatcher(sessions, cache)
-
-    await cache.set(key_hash, KeyRecord(id=created.key.id, team_id="t"))
-    assert await watcher.poll_once() == 1  # created within the look-back window
-    assert await cache.get(key_hash) is None
+    watcher = KeyChangeWatcher(SqlKeyChangeSource(sessions), cache)
+    await watcher.poll_once()
 
     await cache.set(key_hash, KeyRecord(id=created.key.id, team_id="t"))
     await revoke_key(sessions, created.key.id)
     await watcher.poll_once()
     assert await cache.get(key_hash) is None
-
-
-async def test_the_watcher_starts_and_stops(sessions: Sessions) -> None:
-    watcher = KeyChangeWatcher(sessions, InMemoryKeyCache(), interval_s=0.01)
-    await watcher.start()
-    await watcher.start()
-    await watcher.aclose()
-    await watcher.aclose()
 
 
 async def test_redis_cache_round_trip_and_eviction() -> None:
@@ -196,7 +197,8 @@ async def test_build_governance_uses_memory_or_redis(
     db_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     env = {"PRISM_KEY_PEPPER": PEPPER, "PRISM_DATABASE_URL": db_url}
-    memory = build_governance(env)
+    database = connect_database(env)
+    memory = build_governance(env, database)
     assert isinstance(memory.authenticator.cache, InMemoryKeyCache)
     for service in memory.services:
         await service.start()
@@ -204,7 +206,8 @@ async def test_build_governance_uses_memory_or_redis(
         await service.aclose()
 
     monkeypatch.setattr("prism.store.redis_cache.connect", lambda url: FakeAsyncRedis())
-    shared = build_governance({**env, "PRISM_REDIS_URL": "redis://localhost:6379/0"})
+    shared = build_governance({**env, "PRISM_REDIS_URL": "redis://localhost:6379/0"}, database)
     assert isinstance(shared.authenticator.cache, RedisKeyCache)
     for service in shared.services:
         await service.aclose()
+    await database.aclose()

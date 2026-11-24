@@ -7,6 +7,7 @@ import ipaddress
 import os
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -14,6 +15,7 @@ import typer
 
 from prism import __version__
 from prism.config import ConfigError, PrismConfig, load_config, missing_env_vars
+from prism.core.governance.budgets import BudgetMode, BudgetPeriod, BudgetScope
 
 EXIT_OK = 0
 EXIT_MISSING_ENV = 1
@@ -91,22 +93,26 @@ def _pepper_or_exit() -> str:
 
 
 def _require_migrated(url: str) -> None:
-    """Exit with a hint when the key tables do not exist yet."""
-    from sqlalchemy import create_engine, inspect
+    """Exit with a hint unless the database is at the newest migration."""
     from sqlalchemy.exc import SQLAlchemyError
 
-    from prism.store.migrate import to_sync_url
+    from prism.store.migrate import current_revision, head_revision
 
-    engine = create_engine(to_sync_url(url))
     try:
-        ready = inspect(engine).has_table("virtual_keys")
+        current = current_revision(url)
     except SQLAlchemyError as exc:
         typer.echo(f"Cannot open the database: {exc}", err=True)
         raise typer.Exit(EXIT_BAD_CONFIG) from exc
-    finally:
-        engine.dispose()
-    if not ready:
+    head = head_revision(url)
+    if current is None:
         typer.echo("The database has no tables yet. Run: prism db-upgrade", err=True)
+        raise typer.Exit(EXIT_BAD_CONFIG)
+    if current != head:
+        typer.echo(
+            f"The database is at migration {current}, but this version of Prism needs {head}. "
+            "Run: prism db-upgrade",
+            err=True,
+        )
         raise typer.Exit(EXIT_BAD_CONFIG)
 
 
@@ -128,7 +134,7 @@ def serve(
     """Start the gateway."""
     import uvicorn
 
-    from prism.main import build_governance, create_app
+    from prism.main import build_governance, build_usage_recorder, connect_database, create_app
 
     if no_auth and not _is_loopback(host):
         typer.echo(
@@ -138,13 +144,21 @@ def serve(
         raise typer.Exit(EXIT_BAD_CONFIG)
 
     loaded = _load_or_exit(config) if config else None
-    governance = None
+    database = governance = usage = None
     if not no_auth:
         _pepper_or_exit()
         _require_migrated(_database_url(None))
-        governance = build_governance(os.environ)
+        database = connect_database(os.environ)
+        governance = build_governance(os.environ, database)
+        usage = build_usage_recorder(database)
     try:
-        web_app = create_app(loaded, governance=governance, auth_disabled=no_auth)
+        web_app = create_app(
+            loaded,
+            governance=governance,
+            usage=usage,
+            database=database,
+            auth_disabled=no_auth,
+        )
     except ConfigError as exc:
         typer.echo(f"Config is not valid:\n{exc}", err=True)
         raise typer.Exit(EXIT_BAD_CONFIG) from exc
@@ -187,8 +201,10 @@ def db_upgrade(
 
 teams_app = typer.Typer(help="Manage teams.", no_args_is_help=True)
 keys_app = typer.Typer(help="Manage virtual keys.", no_args_is_help=True)
+budgets_app = typer.Typer(help="Manage budgets.", no_args_is_help=True)
 app.add_typer(teams_app, name="teams")
 app.add_typer(keys_app, name="keys")
+app.add_typer(budgets_app, name="budgets")
 
 UrlOption = Annotated[
     str | None, typer.Option("--url", help="Database URL (default: PRISM_DATABASE_URL).")
@@ -217,7 +233,7 @@ def _run_admin[T](url: str | None, action: Callable[[Any], Awaitable[T]]) -> T:
 def _with_hint(error: Exception) -> str:
     """The error message, plus the command that fixes it when there is one."""
     from prism.core.governance.teams import check_team_name
-    from prism.store.teams import TeamNotFoundError
+    from prism.store.team_admin import TeamNotFoundError
 
     if not isinstance(error, TeamNotFoundError):
         return str(error)
@@ -245,7 +261,7 @@ def teams_create(
     url: UrlOption = None,
 ) -> None:
     """Create a team."""
-    from prism.store.teams import create_team
+    from prism.store.team_admin import create_team
 
     team = _run_admin(url, lambda sessions: create_team(sessions, name))
     typer.echo(f"Created team '{team.name}' ({team.id}).")
@@ -254,7 +270,7 @@ def teams_create(
 @teams_app.command("list")
 def teams_list(url: UrlOption = None) -> None:
     """List the teams."""
-    from prism.store.teams import list_teams
+    from prism.store.team_admin import list_teams
 
     teams = _run_admin(url, list_teams)
     if not teams:
@@ -307,7 +323,7 @@ def keys_create(
     url: UrlOption = None,
 ) -> None:
     """Create a virtual key. The key is shown once."""
-    from prism.store.keys import create_key
+    from prism.store.key_admin import create_key
 
     pepper = _pepper_or_exit()
     allowed = [r.strip() for r in routes.split(",") if r.strip()] if routes else []
@@ -338,7 +354,7 @@ def keys_list(
     url: UrlOption = None,
 ) -> None:
     """List virtual keys. Secrets are never shown."""
-    from prism.store.keys import list_keys
+    from prism.store.key_admin import list_keys
 
     listings = _run_admin(url, lambda sessions: list_keys(sessions, team))
     if not listings:
@@ -358,7 +374,7 @@ def keys_revoke(
     url: UrlOption = None,
 ) -> None:
     """Revoke a virtual key. It stops working on every instance within seconds."""
-    from prism.store.keys import revoke_key
+    from prism.store.key_admin import revoke_key
 
     revoked = _run_admin(url, lambda sessions: revoke_key(sessions, key))
     redis_url = os.environ.get("PRISM_REDIS_URL")
@@ -371,6 +387,58 @@ def keys_revoke(
         f"Revoked key '{revoked.name}' ({revoked.id}). "
         "Running instances stop accepting it within a few seconds."
     )
+
+
+@budgets_app.command("create")
+def budgets_create(
+    limit: Annotated[str, typer.Option("--limit-usd", help="Spend limit in US dollars.")],
+    team: Annotated[str | None, typer.Option(help="Team name.")] = None,
+    key: Annotated[str | None, typer.Option(help="Virtual key id or display prefix.")] = None,
+    period: Annotated[BudgetPeriod, typer.Option()] = BudgetPeriod.MONTHLY,
+    mode: Annotated[BudgetMode, typer.Option()] = BudgetMode.HARD,
+    url: UrlOption = None,
+) -> None:
+    """Create a key or team budget. Restart the gateway to load it."""
+    from prism.store.budgets import create_budget
+
+    if (team is None) == (key is None):
+        raise typer.BadParameter("Specify exactly one of --team or --key.")
+    try:
+        limit_usd = Decimal(limit)
+    except InvalidOperation as exc:
+        raise typer.BadParameter("Enter a decimal amount.", param_hint="--limit-usd") from exc
+    scope, target = (BudgetScope.TEAM, team) if team is not None else (BudgetScope.KEY, key)
+    assert target is not None
+    row = _run_admin(
+        url, lambda sessions: create_budget(sessions, scope, target, limit_usd, period, mode)
+    )
+    typer.echo(f"Created budget {row.id}. Restart the gateway to load it.")
+
+
+@budgets_app.command("list")
+def budgets_list(url: UrlOption = None) -> None:
+    """List budgets with their last saved spend."""
+    from prism.store.budgets import SqlBudgetStore
+
+    listings = _run_admin(url, lambda sessions: SqlBudgetStore(sessions).load())
+    if not listings:
+        typer.echo("No budgets yet. Create one with: prism budgets create --help")
+        return
+    rows = [["ID", "SCOPE", "SCOPE ID", "MODE", "PERIOD", "LIMIT USD", "SPENT USD", "RESETS UTC"]]
+    for budget, spend in listings:
+        rows.append(
+            [
+                budget.id,
+                budget.scope.value,
+                budget.scope_id,
+                budget.mode.value,
+                budget.period.value,
+                format(budget.limit_usd, "f"),
+                format(spend.spent_usd, "f"),
+                spend.reset_at.isoformat(),
+            ]
+        )
+    typer.echo(_table(rows))
 
 
 async def _evict_from_redis(url: str, key_hash: str) -> bool:

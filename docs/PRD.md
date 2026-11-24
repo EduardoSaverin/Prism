@@ -259,7 +259,7 @@ This is the full v1 schema. The database only holds the tables that code already
 | `teams` | `id`, `name` | Owner of keys and budgets |
 | `virtual_keys` | `id`, `key_hash`, `key_prefix`, `name`, `team_id`, `allowed_routes`, `rpm`, `tpm`, `expires_at`, `revoked_at`, `created_at`, `updated_at` | Only an HMAC of the key is stored ([ADR 0008](adr/0008-virtual-keys.md)). `rpm` and `tpm` arrive with rate limits. |
 | `budgets` | `id`, `scope`, `limit_usd`, `period`, `reset_at`, `spent_usd` | Scope is a key or a team |
-| `usage_events` | `id`, `ts`, `request_id`, `key_id`, `route`, `provider`, `model`, `input_tokens`, `output_tokens`, `cost_usd`, `latency_ms`, `status`, `cache_hit` | Partitioned by day on PostgreSQL |
+| `usage_events` | `id`, `ts`, `request_id`, `key_id`, `team_id`, `route`, `provider`, `model`, `input_tokens`, `output_tokens`, `cost_usd`, `latency_ms`, `status`, `cache_hit`, `attempts` | Built (migration `0002`). Partitioning by day on PostgreSQL is planned. |
 | `plugin_configs` | `id`, `scope`, `plugin`, `position`, `config_json` | Order decides execution |
 | `audit_log` | `id`, `ts`, `actor`, `action`, `target` | Every admin change |
 

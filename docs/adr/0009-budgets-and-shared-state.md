@@ -30,6 +30,12 @@ as one instance by default and as several instances in production.
 
 ## Consequences
 
+- Migration `0003` enables single-process budgets. It loads key and team budgets
+  at startup and saves changed counters to SQL every five seconds and at
+  graceful shutdown. Redis-backed budget counters and rate limits remain planned.
+- A request applies its reported cost to the UTC budget period in effect when
+  it completes. If a request crosses more than one soft threshold, its usage
+  event stores the highest percentage and the gateway logs each crossing.
 - Single-node installs need no extra infrastructure.
 - Redis is an optional extra: `prismgw[redis]`.
 - Running several instances without Redis gives each instance its own limits.

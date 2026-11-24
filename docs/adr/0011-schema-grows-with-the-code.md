@@ -21,7 +21,7 @@ against a real use.
 
 | Table or column | Added with |
 | --- | --- |
-| `usage_events` | Phase 2, pricing and usage sinks ([0010](0010-pricing-and-usage-sinks.md)) |
+| `usage_events` | Phase 2, pricing and usage sinks ([0010](0010-pricing-and-usage-sinks.md)). Added in migration `0002`. |
 | `budgets` (with `mode`, see [0003](0003-schema-additions.md)) | Phase 2, budgets ([0009](0009-budgets-and-shared-state.md)) |
 | `virtual_keys.rpm`, `virtual_keys.tpm` | Phase 2, rate limits ([0009](0009-budgets-and-shared-state.md)) |
 | `providers`, `provider_keys`, `routes`, `route_targets`, `plugin_configs`, `audit_log` | Phase 3, admin API |
@@ -31,5 +31,8 @@ against a real use.
 - The PRD data model table stays as the target design, not a description of
   the current database.
 - After the first release, `0001` is frozen and every change is a new migration.
-- Anyone who ran `prism db-upgrade` on a development database before this
-  change should delete that database file and run it again.
+- SQLite databases created with the original `0001` can run `prism db-upgrade`.
+  Migration `0002` upgrades their virtual keys and usage events in place and
+  preserves the other tables. Existing usage IDs become strings. Old events
+  get a team when their key still exists and record zero attempts because the
+  old schema did not collect this count.

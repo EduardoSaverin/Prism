@@ -9,7 +9,7 @@
 **An OpenAI-compatible AI gateway.** Prism puts one endpoint in front of many LLM providers. It handles routing, failover, caching, governance and observability, so your applications don't have to.
 
 > [!WARNING]
-> Prism is in early development (pre-alpha, `0.1.0`). The core gateway works: chat completions with streaming, nine providers, retries, fallback chains, circuit breakers and virtual keys. Budgets, rate limits, caching and metrics are not built yet, and APIs and configuration may change without notice. Planned work is tracked on the [project board](https://github.com/users/EduardoSaverin/projects/3), with one [milestone](https://github.com/EduardoSaverin/Prism/milestones) per phase.
+> Prism is in early development (pre-alpha, `0.1.0`). The core gateway works: chat completions with streaming, nine providers, retries, fallback chains, circuit breakers, virtual keys and single-process budgets. Rate limits, caching and metrics are not built yet, and APIs and configuration may change without notice. Planned work is tracked on the [project board](https://github.com/users/EduardoSaverin/projects/3), with one [milestone](https://github.com/EduardoSaverin/Prism/milestones) per phase.
 
 ## Why Prism
 
@@ -29,7 +29,7 @@ Teams that use several LLM providers often end up with provider SDKs scattered t
 | Providers | OpenAI, Anthropic, Gemini, Groq, Mistral, Cerebras, NVIDIA NIM, Cloudflare Workers AI, Ollama, and any OpenAI-compatible server (vLLM, llama.cpp, LM Studio) |
 | Routing | Priority, weighted, round-robin and latency policies. Retries with backoff and jitter, fallback chains, a circuit breaker per target. Weighted key pools, optionally limited per target. |
 | Governance | Teams and hashed virtual keys with allowed routes, expiry and revocation, managed with the CLI. Optional Redis cache shared by instances. |
-| Cost | Model prices in the config and a US dollar cost for every request, from its token usage |
+| Cost and usage | Model prices in the config and a US dollar cost for every request, from its token usage. A usage record for every request, written to the database in batches off the request path. |
 | Storage | SQLite or PostgreSQL, with Alembic migrations |
 
 The full product specification is in the [product requirements document](docs/PRD.md).
@@ -188,6 +188,46 @@ Each provider can list `prices` by model name, in US dollars per million input a
 
 Prices change, so check each provider's pricing page. Prism never hard-codes them.
 
+### Usage records
+
+Every `/v1/chat/completions` request leaves one row in the `usage_events` table, whether it succeeded or failed. A row holds the time, request ID, route, virtual key and team, the provider and model of the last target tried, input and output tokens, cost, latency in milliseconds, the number of attempts, whether a plugin answered (`cache_hit`), and a status:
+
+- `success`
+- an error kind, such as `rate_limited` or `upstream_unavailable`
+- `cancelled`, when the client went away first
+
+A streamed request is recorded when its stream ends.
+
+Records never slow a request down. Each one goes into an in-memory queue, and a background task writes the queue to the database in batches every second, or as soon as 500 records are waiting. When the app shuts down, it writes what is left before closing the database. If the queue fills up (10,000 records), new records are dropped with a warning. If a write fails, that batch is dropped and the error is logged. Losing a record affects reports, never enforcement.
+
+Usage records need the database, so they are written whenever virtual keys are on. `prism serve --no-auth` records nothing.
+
+### Budgets
+
+Run `prism db-upgrade` before starting the gateway with budget support. Create a
+budget for a team by name or for a virtual key by ID or display prefix:
+
+```bash
+uv run --env-file .env prism budgets create --team my-team --limit-usd 25 --period monthly
+uv run --env-file .env prism budgets create --key KEY_ID --limit-usd 5 --period daily --mode soft
+uv run --env-file .env prism budgets list
+```
+
+Restart the gateway after creating budgets so it can load them. Each request
+counts toward every applicable key and team budget at completion, based on the
+token usage the provider reported. When any hard budget has reached its limit,
+new requests return HTTP 429 with code `budget_exceeded`. In-flight requests can
+take spend over the limit. Soft budgets log crossings at 80% and 100% and flag
+the highest threshold crossed on that request's usage record.
+
+Daily, weekly and monthly budgets reset at midnight UTC, on Mondays and on the
+first of the month respectively. Prism loads the last saved spend at startup
+and saves changes every five seconds and on graceful shutdown. `budgets list`
+shows the last saved spend. A crash can lose spend since the last successful
+save. Budget enforcement supports one gateway process. Redis can still cache
+virtual keys, and shared budget counters are future work. The `--no-auth` mode
+has no key or team budgets.
+
 ### Virtual keys
 
 Every `/v1` request needs a virtual key, sent as `Authorization: Bearer pk-prism-...`. Each key belongs to a team and can be limited to some routes. Prism stores only an HMAC of each key, made with `PRISM_KEY_PEPPER`, and shows the key once, when it is created.
@@ -241,7 +281,7 @@ Run `prism --help` or `prism <command> --help` for every option.
 
 ![Prism architecture](docs/diagrams/architecture.svg)
 
-The diagram shows the target design. Today Prism runs as the data plane only: it reads the YAML config at startup, checks virtual keys against the database (through an in-memory or Redis cache), and keeps no other state, so several instances can run side by side. The control plane (admin API, dashboard and live config reload) is not built yet.
+The diagram shows the target design. Today Prism runs as the data plane only: it reads the YAML config at startup, checks virtual keys against the database (through an in-memory or Redis cache), writes usage records to it in batches, and keeps no other state, so several instances can run side by side. The control plane (admin API, dashboard and live config reload) is not built yet.
 
 Each request passes through five stages: authenticate (virtual key), pre-process (plugins), route, call the provider, post-process. Every failure is classified. It is then retried, failed over to the next target, or returned to the client as a standard OpenAI error object.
 
@@ -339,10 +379,11 @@ src/prism/
 ├── api/           HTTP routes (/v1/chat/completions, /v1/models)
 ├── core/          types, errors, gateway pipeline, key pools, circuit breakers, pricing
 │   ├── policies/      routing policy contract, one file per policy, and the registry that picks one
-│   └── governance/    virtual key and team rules, key hashing, cache and authentication
+│   ├── governance/    virtual key and team rules, key hashing, cache and authentication
+│   └── usage/         usage records, the sink contract and the batching recorder
 ├── providers/     adapter contract, OpenAI-compatible, Anthropic and Gemini adapters, registry
 ├── plugins/       plugin contract
-├── store/         database models, migrations, team and key management, Redis key cache
+├── store/         database models, migrations, team and key management, Redis key cache, usage sink
 ├── config.py      configuration schema and loader
 ├── main.py        ASGI application
 └── cli.py         the `prism` command

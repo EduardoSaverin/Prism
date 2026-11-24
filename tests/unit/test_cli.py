@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 from prism import __version__
 from prism.cli import EXIT_BAD_CONFIG, EXIT_MISSING_ENV, EXIT_OK, app
 from prism.core.governance.keys import DISPLAY_PREFIX_LENGTH
+from prism.store.migrate import upgrade
 
 KEY_VARS = ["GROQ_KEY_1", "GROQ_KEY_2", "GEMINI_KEY_1"]
 
@@ -143,6 +144,19 @@ def test_serve_needs_a_migrated_database(
     assert "prism db-upgrade" in result.stderr
 
 
+def test_serve_needs_the_newest_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_uvicorn: list[dict[str, object]]
+) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'old.db'}"
+    upgrade(url, "0001")
+    monkeypatch.setenv("PRISM_KEY_PEPPER", PEPPER)
+    monkeypatch.setenv("PRISM_DATABASE_URL", url)
+    result = runner.invoke(app, ["serve"])
+    assert result.exit_code == EXIT_BAD_CONFIG
+    assert "at migration 0001, but this version of Prism needs 0003" in result.stderr
+    assert "prism db-upgrade" in result.stderr
+
+
 def test_serve_reports_a_database_it_cannot_open(
     monkeypatch: pytest.MonkeyPatch, no_uvicorn: list[dict[str, object]]
 ) -> None:
@@ -159,6 +173,19 @@ def test_serve_starts_with_keys_enabled(
     result = runner.invoke(app, ["serve", "--config", str(example_config_path)])
     assert result.exit_code == EXIT_OK
     assert len(no_uvicorn) == 1
+
+
+def test_budget_commands_create_and_list_a_team_budget(db: str) -> None:
+    assert runner.invoke(app, ["teams", "create", "ml"]).exit_code == EXIT_OK
+    result = runner.invoke(
+        app,
+        ["budgets", "create", "--team", "ml", "--limit-usd", "10.50", "--period", "daily"],
+    )
+    assert result.exit_code == EXIT_OK
+    listed = runner.invoke(app, ["budgets", "list"])
+    assert listed.exit_code == EXIT_OK
+    assert "daily" in listed.stdout
+    assert "10.50" in listed.stdout
 
 
 def test_teams_and_keys_lifecycle(db: str) -> None:

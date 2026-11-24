@@ -137,6 +137,20 @@ class KeyCache(Protocol):
     async def evict(self, key_hash: str) -> None: ...
 
 
+@dataclass(frozen=True)
+class KeyChange:
+    """A key that was created, changed or revoked, and when (timezone-aware UTC)."""
+
+    key_hash: str
+    updated_at: datetime
+
+
+class KeyChangeSource(Protocol):
+    """Lists keys changed in the source of truth at or after a moment."""
+
+    async def changed_since(self, since: datetime) -> list[KeyChange]: ...
+
+
 Clock = Callable[[], float]
 
 

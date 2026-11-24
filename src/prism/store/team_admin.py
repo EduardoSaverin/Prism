@@ -1,4 +1,7 @@
-"""Teams in the database. A team owns virtual keys (and, later, budgets)."""
+"""Managing teams in the database: create, list and find by name. Used by the CLI.
+
+A team owns virtual keys and can have spend budgets.
+"""
 
 from __future__ import annotations
 

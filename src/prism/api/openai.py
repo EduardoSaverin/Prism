@@ -13,9 +13,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from prism.api.usage import record_usage
 from prism.core.context import RequestContext
 from prism.core.errors import ErrorKind, PrismError
 from prism.core.gateway import Gateway
+from prism.core.governance.budgets import BudgetTracker
 from prism.core.governance.keys import Authenticator, KeyRecord
 from prism.core.types import ChatChunk, ChatRequest, Target
 
@@ -96,36 +98,55 @@ async def chat_completions(
         team_id=key.team_id if key else None,
     )
 
-    if not body.stream:
+    budgets: BudgetTracker | None = request.app.state.budgets
+    try:
+        if budgets is not None:
+            budgets.check(ctx)
+        if body.stream:
+            stream = await gateway.stream(body, ctx)
+            headers = {
+                **_headers(rid, stream.target),
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            }
+            return StreamingResponse(
+                _sse(stream.chunks, request, ctx), media_type="text/event-stream", headers=headers
+            )
         result = await gateway.chat(body, ctx)
-        return JSONResponse(
-            result.response.model_dump(mode="json", exclude_none=True),
-            headers=_headers(rid, result.target),
-        )
+    except BaseException as error:
+        record_usage(request, ctx, error)
+        raise
 
-    result = await gateway.stream(body, ctx)
-    headers = {
-        **_headers(rid, result.target),
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    }
-    return StreamingResponse(
-        _sse(result.chunks, rid), media_type="text/event-stream", headers=headers
+    record_usage(request, ctx, None)
+    return JSONResponse(
+        result.response.model_dump(mode="json", exclude_none=True),
+        headers=_headers(rid, result.target),
     )
 
 
-async def _sse(chunks: AsyncIterator[ChatChunk], rid: str) -> AsyncIterator[str]:
+async def _sse(
+    chunks: AsyncIterator[ChatChunk], request: Request, ctx: RequestContext
+) -> AsyncIterator[str]:
+    # The usage record is written when the stream ends, however it ends.
+    ended: BaseException | None = None
     try:
         async for chunk in chunks:
             yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
     except PrismError as error:
+        ended = error
         yield f"data: {json.dumps(error.to_openai_error())}\n\n"
         return
-    except Exception:
-        log.exception("Stream %s failed", rid)
+    except Exception as error:
+        ended = error
+        log.exception("Stream %s failed", ctx.request_id)
         internal = PrismError(ErrorKind.INTERNAL_ERROR, "An internal error occurred.")
         yield f"data: {json.dumps(internal.to_openai_error())}\n\n"
         return
+    except BaseException as error:  # the client went away
+        ended = error
+        raise
+    finally:
+        record_usage(request, ctx, ended)
     yield "data: [DONE]\n\n"
 
 

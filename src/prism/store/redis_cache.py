@@ -27,6 +27,12 @@ class RedisKeyCache:
         self.client = client
         self.ttl_s = ttl_s
 
+    async def start(self) -> None:
+        """Redis opens connections on first use."""
+
+    async def aclose(self) -> None:
+        await self.client.aclose()
+
     async def get(self, key_hash: str) -> KeyRecord | None:
         try:
             raw = await self.client.get(KEY_NAMESPACE + key_hash)

@@ -35,6 +35,20 @@ latency, and usage data is also useful to systems outside Prism.
   `RequestContext.cost_usd` from the target that answered.
 - The cost is not sent to clients (no response header). It stays inside Prism for
   usage records and budgets.
+- `core/usage/` holds `UsageRecord`, the `UsageSink` and `UsageRecorder`
+  protocols, and `BatchingUsageRecorder` (queue of 10,000, batches of 500, a
+  flush every second). `store/usage.py` holds `SqlUsageSink`, which writes each
+  batch with one multi-row insert. Migration `0002` adds `usage_events`.
+- Records are built in the API layer when a request ends, so failures and
+  streams are recorded too. Besides the PRD columns, a record keeps `team_id`
+  (for team reports and budgets) and `attempts`. `key_id` and `team_id` are not
+  foreign keys, so history survives deleting a key or team.
+- On shutdown the recorder is asked to stop rather than cancelled, so a batch
+  being written is finished, and the database closes after it.
+- `prism serve` refuses to start unless the database is at the newest
+  migration.
+- Not done yet: partitioning `usage_events` by day on PostgreSQL. It can be
+  added once the table grows large enough to need it.
 
 ## Consequences
 

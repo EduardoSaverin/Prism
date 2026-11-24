@@ -1,5 +1,7 @@
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,8 @@ from prism.core.governance.keys import (
     generate_key,
     hash_key,
 )
+from prism.core.usage.batching import BatchingUsageRecorder
+from prism.core.usage.record import UsageRecord
 from prism.main import Governance, create_app
 from prism.providers.fake import FakeProviderError
 from prism.providers.registry import build_gateway
@@ -368,3 +372,87 @@ async def test_the_app_starts_and_stops_governance_services() -> None:
     async with app.router.lifespan_context(app):
         assert events == ["start watcher", "start db"]
     assert events[2:] == ["stop db", "stop watcher"]
+
+
+class _ListSink:
+    def __init__(self) -> None:
+        self.records: list[UsageRecord] = []
+
+    async def write(self, records: Sequence[UsageRecord]) -> None:
+        self.records.extend(records)
+
+
+async def _recorded(*adapters: ScriptedAdapter, body: dict[str, Any]) -> list[UsageRecord]:
+    """Send one request through an app with a usage recorder; return what it recorded."""
+    names = [a.name for a in adapters]
+    config = config_for(names, [route("chat", *names)])
+    for entry in config["providers"]:
+        entry["prices"] = {f"{entry['id']}-model": {"input": 2, "output": 6}}
+    h = build(config, {a.name: a for a in adapters})
+    sink = _ListSink()
+    recorder = BatchingUsageRecorder(sink)
+    app = create_app(h.gateway.config, gateway=h.gateway, usage=recorder, auth_disabled=True)
+    async with client_for(app) as client:
+        await client.post("/v1/chat/completions", json=body)
+    await recorder.flush()
+    return sink.records
+
+
+async def test_a_successful_request_is_recorded_with_its_cost() -> None:
+    (record,) = await _recorded(ScriptedAdapter("a"), body=BODY)
+    assert (record.route, record.provider, record.model) == ("chat", "a", "a-model")
+    assert (record.input_tokens, record.output_tokens) == (10, 5)
+    assert record.cost_usd == Decimal("0.00005")
+    assert (record.status, record.attempts, record.cache_hit) == ("success", 1, False)
+
+
+async def test_a_failed_request_is_recorded_with_its_error() -> None:
+    failing = ScriptedAdapter("a", errors=[FakeProviderError(400)])
+    (record,) = await _recorded(failing, body=BODY)
+    assert (record.status, record.provider, record.cost_usd) == ("invalid_request", "a", 0)
+
+
+async def test_an_unknown_route_is_recorded() -> None:
+    (record,) = await _recorded(ScriptedAdapter("a"), body={**BODY, "model": "nope"})
+    assert (record.route, record.status, record.provider) == ("nope", "route_not_found", None)
+
+
+async def test_a_stream_is_recorded_when_it_ends() -> None:
+    (record,) = await _recorded(ScriptedAdapter("a"), body={**BODY, "stream": True})
+    assert (record.status, record.output_tokens) == ("success", 5)
+    assert record.cost_usd == Decimal("0.00005")
+
+
+async def test_a_stream_that_breaks_is_recorded_with_its_error() -> None:
+    broken = ScriptedAdapter("a", pieces=["one", "two"], break_stream_after=1)
+    (record,) = await _recorded(broken, body={**BODY, "stream": True})
+    assert record.status == "upstream_unavailable"
+
+
+async def test_a_stream_that_never_starts_is_recorded() -> None:
+    failing = ScriptedAdapter("a", errors=[FakeProviderError(400)])
+    (record,) = await _recorded(failing, body={**BODY, "stream": True})
+    assert record.status == "invalid_request"
+
+
+async def test_a_broken_recorder_never_breaks_the_request(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Broken(BatchingUsageRecorder):
+        def record(self, record: UsageRecord) -> None:
+            raise RuntimeError("recorder bug")
+
+    h = build(config_for(["a"], [route("chat", "a")]), {"a": ScriptedAdapter("a")})
+    app = create_app(
+        h.gateway.config, gateway=h.gateway, usage=Broken(_ListSink()), auth_disabled=True
+    )
+    async with client_for(app) as client:
+        response = await client.post("/v1/chat/completions", json=BODY)
+    assert response.status_code == 200
+    assert "Could not record usage" in caplog.text
+
+
+async def test_without_a_recorder_nothing_is_recorded() -> None:
+    async with client_for(app_with(ScriptedAdapter("a"))) as client:
+        response = await client.post("/v1/chat/completions", json=BODY)
+    assert response.status_code == 200

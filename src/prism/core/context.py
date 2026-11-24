@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from prism.core.types import ChatRequest, Usage
+from prism.core.types import ChatRequest, Target, Usage
 
 
 @dataclass
@@ -22,6 +22,10 @@ class RequestContext:
     team_id: str | None = None
     attempt: int = 0
     started_at: float = field(default_factory=time.monotonic)
+    # The target being tried, then the one that answered. None if no provider was called.
+    target: Target | None = None
+    # True when a plugin (such as a cache) answered without calling a provider.
+    cache_hit: bool = False
     # Set once the provider reports token usage. No usage means no cost.
     usage: Usage | None = None
     cost_usd: Decimal | None = None
