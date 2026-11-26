@@ -1,11 +1,11 @@
 import asyncio
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from prism.core.context import RequestContext
 from prism.core.governance.budgets import (
     Budget,
+    BudgetBatch,
     BudgetMode,
     BudgetPeriod,
     BudgetScope,
@@ -24,14 +24,14 @@ async def test_a_failed_flush_retries_with_the_latest_spend() -> None:
         "budget", BudgetScope.KEY, "key", Decimal(10), BudgetMode.HARD, BudgetPeriod.DAILY
     )
     reset_at = budget.period.next_reset(now)
-    writes: list[BudgetSpend] = []
+    writes: list[BudgetBatch] = []
 
     class Store:
         async def load(self) -> list[tuple[Budget, BudgetSpend]]:
             return [(budget, BudgetSpend(budget.id, reset_at, Decimal(0)))]
 
-        async def save(self, snapshots: Sequence[BudgetSpend]) -> None:
-            writes.extend(snapshots)
+        async def save(self, batch: BudgetBatch) -> None:
+            writes.append(batch)
             if len(writes) == 1:
                 first_write_started.set()
                 await fail_first_write.wait()
@@ -52,4 +52,7 @@ async def test_a_failed_flush_retries_with_the_latest_spend() -> None:
         fail_first_write.set()
         await service.aclose()
 
-    assert [snapshot.spent_usd for snapshot in writes] == [Decimal(1), Decimal(2)]
+    assert len(writes) == 3
+    assert writes[0] == writes[1]
+    assert writes[2].id != writes[1].id
+    assert [batch.deltas[0].amount for batch in writes] == [Decimal(1)] * 3

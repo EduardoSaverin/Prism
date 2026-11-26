@@ -153,7 +153,7 @@ def test_serve_needs_the_newest_migration(
     monkeypatch.setenv("PRISM_DATABASE_URL", url)
     result = runner.invoke(app, ["serve"])
     assert result.exit_code == EXIT_BAD_CONFIG
-    assert "at migration 0001, but this version of Prism needs 0003" in result.stderr
+    assert "at migration 0001, but this version of Prism needs 0004" in result.stderr
     assert "prism db-upgrade" in result.stderr
 
 

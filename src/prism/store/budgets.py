@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from prism.core.governance.budgets import Budget, BudgetMode, BudgetPeriod, BudgetScope, BudgetSpend
+from prism.core.governance.budgets import (
+    Budget,
+    BudgetBatch,
+    BudgetMode,
+    BudgetPeriod,
+    BudgetScope,
+    BudgetSpend,
+)
 from prism.store.admin import AdminError, Sessions
 from prism.store.key_admin import key_by_id_or_prefix
-from prism.store.models import BudgetRow
+from prism.store.models import AppliedBudgetBatch, BudgetRow
 from prism.store.team_admin import team_by_name
 
 
@@ -43,17 +51,34 @@ class SqlBudgetStore:
                 for row in rows
             ]
 
-    async def save(self, snapshots: Sequence[BudgetSpend]) -> None:
-        values = [
-            {
-                "id": snapshot.budget_id,
-                "reset_at": snapshot.reset_at,
-                "spent_usd": snapshot.spent_usd,
-            }
-            for snapshot in snapshots
-        ]
+    async def save(self, batch: BudgetBatch) -> None:
         async with self._sessions() as session, session.begin():
-            await session.execute(update(BudgetRow), values)
+            insert = sqlite_insert if session.get_bind().dialect.name == "sqlite" else pg_insert
+            receipt = (
+                insert(AppliedBudgetBatch)
+                .values(id=batch.id)
+                .on_conflict_do_nothing(index_elements=[AppliedBudgetBatch.id])
+                .returning(AppliedBudgetBatch.id)
+            )
+            if await session.scalar(receipt) is None:
+                return
+            for delta in batch.deltas:
+                # Advance an expired period once. A late prior-period write cannot
+                # roll the row backwards or add its charge to the new period.
+                await session.execute(
+                    update(BudgetRow)
+                    .where(BudgetRow.id == delta.budget_id, BudgetRow.reset_at <= delta.reset_at)
+                    .values(
+                        spent_usd=case(
+                            (
+                                BudgetRow.reset_at == delta.reset_at,
+                                BudgetRow.spent_usd + delta.amount,
+                            ),
+                            else_=delta.amount,
+                        ),
+                        reset_at=delta.reset_at,
+                    )
+                )
 
 
 async def create_budget(

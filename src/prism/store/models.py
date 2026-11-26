@@ -113,3 +113,9 @@ class BudgetRow(Base):
     period: Mapped[str] = mapped_column(String(8))
     reset_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     spent_usd: Mapped[Decimal] = mapped_column(Numeric(20, 12))
+
+
+class AppliedBudgetBatch(Base):
+    __tablename__ = "applied_budget_batches"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)

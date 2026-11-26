@@ -148,7 +148,7 @@ def test_upgrading_legacy_sqlite_preserves_data(legacy_sqlite: Path) -> None:
     upgrade(url)
     upgrade(url)
 
-    assert current_revision(url) == "0003"
+    assert current_revision(url) == "0004"
     with closing(sqlite3.connect(legacy_sqlite)) as connection:
         key = connection.execute("SELECT * FROM virtual_keys").fetchone()
         assert key is not None
@@ -161,7 +161,9 @@ def test_upgrading_legacy_sqlite_preserves_data(legacy_sqlite: Path) -> None:
             ("42", *old_events[0][1:], "team", 0, None),
             ("43", *old_events[1][1:], None, 0, None),
         ]
-        assert connection.execute("SELECT * FROM budgets").fetchall() == old_budgets
+        assert connection.execute("SELECT * FROM budgets").fetchall() == [
+            (*row[:-2], row[-2] + ".000000", row[-1]) for row in old_budgets
+        ]
         assert connection.execute("SELECT * FROM teams").fetchall() == [("team", "Platform")]
         assert connection.execute("SELECT * FROM audit_log").fetchall() == [(1, "created")]
         assert {row[1] for row in connection.execute("PRAGMA index_list(usage_events)")} >= {

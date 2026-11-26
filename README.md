@@ -222,7 +222,9 @@ the highest threshold crossed on that request's usage record.
 
 Daily, weekly and monthly budgets reset at midnight UTC, on Mondays and on the
 first of the month respectively. Prism loads the last saved spend at startup
-and saves changes every five seconds and on graceful shutdown. `budgets list`
+and adds each gateway’s new charges to SQL every five seconds and on graceful shutdown.
+Overlapping flushes from multiple gateways accumulate in the same budget row.
+Each flush records a batch ID so retries charge it once. `budgets list`
 shows the last saved spend. A crash can lose spend since the last successful
 save. Budget enforcement supports one gateway process. Redis can still cache
 virtual keys, and shared budget counters are future work. The `--no-auth` mode

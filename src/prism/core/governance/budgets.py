@@ -1,15 +1,15 @@
-"""Single-process budget enforcement and periodic spend snapshots."""
+"""Single-process budget enforcement and periodic spend increments."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
+from uuid import uuid4
 
 from prism.core.context import RequestContext
 from prism.core.errors import ErrorKind, PrismError
@@ -59,10 +59,23 @@ class BudgetSpend:
     spent_usd: Decimal
 
 
+@dataclass(frozen=True)
+class BudgetDelta:
+    budget_id: str
+    reset_at: datetime
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class BudgetBatch:
+    id: str
+    deltas: tuple[BudgetDelta, ...]
+
+
 class BudgetStore(Protocol):
     async def load(self) -> list[tuple[Budget, BudgetSpend]]: ...
 
-    async def save(self, snapshots: Sequence[BudgetSpend]) -> None: ...
+    async def save(self, batch: BudgetBatch) -> None: ...
 
 
 def _utcnow() -> datetime:
@@ -78,14 +91,16 @@ class BudgetTracker:
         self._flush_interval_s = flush_interval_s
         self._budgets: dict[tuple[BudgetScope, str | None], list[Budget]] = {}
         self._spend: dict[str, BudgetSpend] = {}
-        self._dirty: dict[str, BudgetSpend] = {}
+        self._pending: dict[tuple[str, datetime], Decimal] = {}
+        self._retry: BudgetBatch | None = None
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         self._budgets.clear()
         self._spend.clear()
-        self._dirty.clear()
+        self._pending.clear()
+        self._retry = None
         self._stop.clear()
         for budget, spend in await self._store.load():
             self._budgets.setdefault((budget.scope, budget.scope_id), []).append(budget)
@@ -121,7 +136,9 @@ class BudgetTracker:
         for budget in self._applicable(ctx):
             previous = self._current_spend(budget, now)
             spent = previous.spent_usd + ctx.cost_usd
-            self._set_spend(BudgetSpend(budget.id, previous.reset_at, spent))
+            self._spend[budget.id] = BudgetSpend(budget.id, previous.reset_at, spent)
+            key = (budget.id, previous.reset_at)
+            self._pending[key] = self._pending.get(key, Decimal(0)) + ctx.cost_usd
             if budget.mode is BudgetMode.SOFT:
                 for percent in (80, 100):
                     limit = budget.limit_usd * percent / 100
@@ -139,12 +156,9 @@ class BudgetTracker:
         spend = self._spend[budget.id]
         if now >= spend.reset_at:
             spend = BudgetSpend(budget.id, budget.period.next_reset(now), Decimal(0))
-            self._set_spend(spend)
+            self._spend[budget.id] = spend
+            self._pending.setdefault((budget.id, spend.reset_at), Decimal(0))
         return spend
-
-    def _set_spend(self, spend: BudgetSpend) -> None:
-        self._spend[spend.budget_id] = spend
-        self._dirty[spend.budget_id] = spend
 
     async def _run(self) -> None:
         while not self._stop.is_set():
@@ -161,12 +175,17 @@ class BudgetTracker:
         for budgets in self._budgets.values():
             for budget in budgets:
                 self._current_spend(budget, now)
-        if not self._dirty:
-            return
-        pending, self._dirty = self._dirty, {}
-        try:
-            await self._store.save(list(pending.values()))
-        except Exception:
-            # A request can update a budget while the write is in progress.
-            self._dirty = pending | self._dirty
-            raise
+        # Keep an unacknowledged batch immutable. Charges arriving during its write
+        # accumulate separately, even if the database committed before a disconnect.
+        if self._retry is not None:
+            await self._store.save(self._retry)
+            self._retry = None
+        if self._pending:
+            deltas = tuple(
+                BudgetDelta(budget_id, reset_at, amount)
+                for (budget_id, reset_at), amount in sorted(self._pending.items())
+            )
+            self._retry = BudgetBatch(uuid4().hex, deltas)
+            self._pending.clear()
+            await self._store.save(self._retry)
+            self._retry = None

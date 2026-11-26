@@ -1,19 +1,21 @@
-from datetime import UTC, datetime
+import asyncio
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from prism.core.context import RequestContext
 from prism.core.errors import PrismError
 from prism.core.governance.budgets import (
+    BudgetBatch,
+    BudgetDelta,
     BudgetMode,
     BudgetPeriod,
     BudgetScope,
-    BudgetSpend,
     BudgetTracker,
 )
 from prism.core.types import ChatMessage, ChatRequest
@@ -21,7 +23,7 @@ from prism.main import build_governance, build_usage_recorder, connect_database,
 from prism.store.budgets import SqlBudgetStore, create_budget
 from prism.store.key_admin import create_key
 from prism.store.migrate import upgrade
-from prism.store.models import UsageEvent
+from prism.store.models import BudgetRow, UsageEvent
 from prism.store.team_admin import create_team
 from tests.scripted import ScriptedAdapter, build, config_for, route
 
@@ -129,7 +131,10 @@ async def test_expired_team_budget_resets_and_applies_to_every_team_key(tmp_path
     )
     store = SqlBudgetStore(database.sessions)
     reset = datetime(2026, 11, 23, tzinfo=UTC)
-    await store.save([BudgetSpend(row.id, reset, Decimal("1"))])
+    async with database.sessions() as session, session.begin():
+        await session.execute(
+            update(BudgetRow).where(BudgetRow.id == row.id).values(reset_at=reset, spent_usd=1)
+        )
     service = BudgetTracker(store, now=lambda: reset)
     request = ChatRequest(model="chat", messages=[ChatMessage(role="user", content="hi")])
     first = RequestContext(request, "chat", key_id="one", team_id=team.id, cost_usd=Decimal("1"))
@@ -146,3 +151,84 @@ async def test_expired_team_budget_resets_and_applies_to_every_team_key(tmp_path
     assert saved.reset_at == datetime(2026, 11, 30, tzinfo=UTC)
     assert saved.spent_usd == Decimal("1")
     await database.aclose()
+
+
+async def test_two_gateways_flush_to_the_same_budget(tmp_path: Path) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'shared.db'}"
+    upgrade(url)
+    env = {"PRISM_DATABASE_URL": url, "PRISM_KEY_PEPPER": "p" * 32}
+    admin = connect_database(env)
+    await create_team(admin.sessions, "team")
+    key = await create_key(
+        admin.sessions, pepper=env["PRISM_KEY_PEPPER"], team_name="team", name="app"
+    )
+    for scope, target in [(BudgetScope.TEAM, "team"), (BudgetScope.KEY, key.key.id)]:
+        await create_budget(
+            admin.sessions, scope, target, Decimal(20), BudgetPeriod.MONTHLY, BudgetMode.HARD
+        )
+    async with admin.sessions() as session, session.begin():
+        await session.execute(update(BudgetRow).values(spent_usd=8))
+
+    config = config_for(["a"], [route("chat", "a")])
+    # The scripted adapter reports ten input tokens: one dollar per request.
+    config["providers"][0]["prices"] = {"a-model": {"input": 100000, "output": 0}}
+    both_ready = asyncio.Barrier(2)
+    both_charged = asyncio.Barrier(2)
+
+    async def run_gateway() -> None:
+        database = connect_database(env)
+        gateway = build(config, {"a": ScriptedAdapter("a")}).gateway
+        app = create_app(
+            gateway.config,
+            gateway=gateway,
+            governance=build_governance(env, database),
+            database=database,
+        )
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as client,
+        ):
+            await both_ready.wait()
+            response = await client.post(
+                "/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key.secret}"},
+                json={"model": "chat", "messages": [{"role": "user", "content": "hi"}]},
+            )
+            response.raise_for_status()
+            await both_charged.wait()
+
+    try:
+        async with asyncio.timeout(10), asyncio.TaskGroup() as workers:
+            workers.create_task(run_gateway())
+            workers.create_task(run_gateway())
+        balances = await SqlBudgetStore(admin.sessions).load()
+        assert [spend.spent_usd for _, spend in balances] == [Decimal(10), Decimal(10)]
+    finally:
+        await admin.aclose()
+
+
+async def test_duplicate_and_late_batches_across_a_reset(tmp_path: Path) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'retry.db'}"
+    upgrade(url)
+    db = connect_database({"PRISM_DATABASE_URL": url})
+    try:
+        await create_team(db.sessions, "team")
+        row = await create_budget(
+            db.sessions, BudgetScope.TEAM, "team", Decimal(20), BudgetPeriod.DAILY, BudgetMode.HARD
+        )
+        store = SqlBudgetStore(db.sessions)
+        old_end = row.reset_at
+        new_end = old_end + timedelta(days=1)
+        old = BudgetDelta(row.id, old_end, Decimal(8))
+        await store.save(BudgetBatch("first", (old,)))
+        new = BudgetBatch("second", (BudgetDelta(row.id, new_end, Decimal(2)),))
+        await asyncio.gather(store.save(new), store.save(new))
+        await store.save(BudgetBatch("late", (old,)))
+        await store.save(BudgetBatch("third", (BudgetDelta(row.id, new_end, Decimal(3)),)))
+        [(_, spend)] = await store.load()
+        assert spend.spent_usd == Decimal(5)
+        assert spend.reset_at == new_end
+    finally:
+        await db.aclose()
