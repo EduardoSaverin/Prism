@@ -141,10 +141,10 @@ async def test_expired_team_budget_resets_and_applies_to_every_team_key(tmp_path
     second = RequestContext(request, "chat", key_id="two", team_id=team.id)
     await service.start()
     try:
-        service.check(first)
-        service.charge(first)
+        await service.admit(first)
+        await service.settle(first)
         with pytest.raises(PrismError, match="team budget"):
-            service.check(second)
+            await service.admit(second)
     finally:
         await service.aclose()
     [(_, saved)] = await store.load()
@@ -207,6 +207,61 @@ async def test_two_gateways_flush_to_the_same_budget(tmp_path: Path) -> None:
         assert [spend.spent_usd for _, spend in balances] == [Decimal(10), Decimal(10)]
     finally:
         await admin.aclose()
+
+
+@pytest.mark.parametrize("scope", [BudgetScope.KEY, BudgetScope.TEAM])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_other_gateway_blocks_next_request(
+    tmp_path: Path, scope: BudgetScope, stream: bool
+) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'admission.db'}"
+    upgrade(url)
+    env = {"PRISM_DATABASE_URL": url, "PRISM_KEY_PEPPER": "p" * 32}
+    first_db, second_db = connect_database(env), connect_database(env)
+    await create_team(first_db.sessions, "ml")
+    key = await create_key(
+        first_db.sessions, pepper=env["PRISM_KEY_PEPPER"], team_name="ml", name="app"
+    )
+    await create_budget(
+        first_db.sessions,
+        scope,
+        key.key.id if scope is BudgetScope.KEY else "ml",
+        Decimal(1),
+        BudgetPeriod.DAILY,
+        BudgetMode.HARD,
+    )
+    config = config_for(["a"], [route("chat", "a")])
+    config["providers"][0]["prices"] = {"a-model": {"input": 100000, "output": 0}}
+    providers = [ScriptedAdapter("a"), ScriptedAdapter("a")]
+    apps = []
+    for database, provider in zip((first_db, second_db), providers, strict=True):
+        gateway = build(config, {"a": provider}).gateway
+        apps.append(
+            create_app(
+                gateway.config,
+                gateway=gateway,
+                governance=build_governance(env, database),
+                database=database,
+            )
+        )
+    first, second = apps
+    body = {"model": "chat", "messages": [{"role": "user", "content": "hi"}], "stream": stream}
+    headers = {"Authorization": f"Bearer {key.secret}"}
+    async with (
+        first.router.lifespan_context(first),
+        second.router.lifespan_context(second),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=first), base_url="http://a") as a,
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=second), base_url="http://b") as b,
+    ):
+        charged = await a.post("/v1/chat/completions", json=body, headers=headers)
+        assert charged.status_code == 200
+        if stream:
+            assert "data: [DONE]" in charged.text
+        denied = await b.post("/v1/chat/completions", json=body, headers=headers)
+        assert denied.status_code == 429
+        assert denied.json()["error"]["code"] == "budget_exceeded"
+        assert len(providers[0].calls) == 1
+        assert providers[1].calls == []
 
 
 async def test_duplicate_and_late_batches_across_a_reset(tmp_path: Path) -> None:

@@ -101,7 +101,7 @@ async def chat_completions(
     budgets: BudgetTracker | None = request.app.state.budgets
     try:
         if budgets is not None:
-            budgets.check(ctx)
+            await budgets.admit(ctx)
         if body.stream:
             stream = await gateway.stream(body, ctx)
             headers = {
@@ -114,10 +114,10 @@ async def chat_completions(
             )
         result = await gateway.chat(body, ctx)
     except BaseException as error:
-        record_usage(request, ctx, error)
+        await record_usage(request, ctx, error)
         raise
 
-    record_usage(request, ctx, None)
+    await record_usage(request, ctx, None)
     return JSONResponse(
         result.response.model_dump(mode="json", exclude_none=True),
         headers=_headers(rid, result.target),
@@ -146,7 +146,15 @@ async def _sse(
         ended = error
         raise
     finally:
-        record_usage(request, ctx, ended)
+        try:
+            await record_usage(request, ctx, ended)
+        except PrismError as error:
+            if ended is not None:
+                raise
+            ended = error
+    if isinstance(ended, PrismError):
+        yield f"data: {json.dumps(ended.to_openai_error())}\n\n"
+        return
     yield "data: [DONE]\n\n"
 
 

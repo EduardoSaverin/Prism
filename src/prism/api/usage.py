@@ -26,10 +26,10 @@ def status_of(error: BaseException | None) -> str:
     return STATUS_CANCELLED  # CancelledError or GeneratorExit: the client went away
 
 
-def record_usage(request: Request, ctx: RequestContext, error: BaseException | None) -> None:
+async def record_usage(request: Request, ctx: RequestContext, error: BaseException | None) -> None:
     """Charge live budgets independently of the best-effort usage record."""
     budgets: BudgetTracker | None = getattr(request.app.state, "budgets", None)
-    threshold = budgets.charge(ctx) if budgets is not None else None
+    threshold = await budgets.settle(ctx) if budgets is not None else None
     recorder: UsageRecorder | None = getattr(request.app.state, "usage", None)
     if recorder is None:
         return

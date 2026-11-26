@@ -18,6 +18,7 @@ class ErrorKind(StrEnum):
     INVALID_REQUEST = "invalid_request"
     AUTH_FAILED = "auth_failed"
     CONTENT_BLOCKED = "content_blocked"
+    BUDGET_UNAVAILABLE = "budget_unavailable"
     BUDGET_EXCEEDED = "budget_exceeded"
     ROUTE_NOT_FOUND = "route_not_found"
     UNAUTHENTICATED = "unauthenticated"
@@ -50,6 +51,9 @@ POLICIES: dict[ErrorKind, ErrorPolicy] = {
     ),
     ErrorKind.CONTENT_BLOCKED: ErrorPolicy(
         False, False, 400, "invalid_request_error", "content_policy"
+    ),
+    ErrorKind.BUDGET_UNAVAILABLE: ErrorPolicy(
+        False, False, 503, "server_error", "budget_unavailable"
     ),
     ErrorKind.BUDGET_EXCEEDED: ErrorPolicy(
         False, False, 429, "rate_limit_error", "budget_exceeded"

@@ -9,7 +9,7 @@
 **An OpenAI-compatible AI gateway.** Prism puts one endpoint in front of many LLM providers. It handles routing, failover, caching, governance and observability, so your applications don't have to.
 
 > [!WARNING]
-> Prism is in early development (pre-alpha, `0.1.0`). The core gateway works: chat completions with streaming, nine providers, retries, fallback chains, circuit breakers, virtual keys and single-process budgets. Rate limits, caching and metrics are not built yet, and APIs and configuration may change without notice. Planned work is tracked on the [project board](https://github.com/users/EduardoSaverin/projects/3), with one [milestone](https://github.com/EduardoSaverin/Prism/milestones) per phase.
+> Prism is in early development (pre-alpha, `0.1.0`). The core gateway works: chat completions with streaming, nine providers, retries, fallback chains, circuit breakers, virtual keys and shared hard budgets. Rate limits, caching and metrics are not built yet, and APIs and configuration may change without notice. Planned work is tracked on the [project board](https://github.com/users/EduardoSaverin/projects/3), with one [milestone](https://github.com/EduardoSaverin/Prism/milestones) per phase.
 
 ## Why Prism
 
@@ -222,12 +222,12 @@ the highest threshold crossed on that request's usage record.
 
 Daily, weekly and monthly budgets reset at midnight UTC, on Mondays and on the
 first of the month respectively. Prism loads the last saved spend at startup
-and adds each gateway’s new charges to SQL every five seconds and on graceful shutdown.
-Overlapping flushes from multiple gateways accumulate in the same budget row.
-Each flush records a batch ID so retries charge it once. `budgets list`
-shows the last saved spend. A crash can lose spend since the last successful
-save. Budget enforcement supports one gateway process. Redis can still cache
-virtual keys, and shared budget counters are future work. The `--no-auth` mode
+and checks shared SQL spend before admitting requests with hard budgets. Completed
+charges are committed before returning a successful response or ending a successful stream.
+Requests already in flight can still overshoot. If a shared check is unavailable,
+the gateway returns HTTP 503. Failed settlements are retained in memory for retry
+and can be lost on a crash. Usage reporting is still batched, and soft threshold
+warnings use local counters. The `--no-auth` mode
 has no key or team budgets.
 
 ### Virtual keys

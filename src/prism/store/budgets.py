@@ -51,6 +51,26 @@ class SqlBudgetStore:
                 for row in rows
             ]
 
+    async def exhausted(self, ids: list[str], now: datetime) -> tuple[str, datetime] | None:
+        async with self._sessions() as session:
+            row = (
+                await session.execute(
+                    select(BudgetRow.scope, BudgetRow.reset_at)
+                    .where(
+                        BudgetRow.id.in_(ids),
+                        BudgetRow.mode == BudgetMode.HARD,
+                        BudgetRow.reset_at > now,
+                        BudgetRow.spent_usd >= BudgetRow.limit_usd,
+                    )
+                    .order_by(BudgetRow.reset_at.desc())
+                    .limit(1)
+                )
+            ).first()
+        if row is None:
+            return None
+        scope, reset_at = row
+        return scope, reset_at if reset_at.tzinfo else reset_at.replace(tzinfo=UTC)
+
     async def save(self, batch: BudgetBatch) -> None:
         async with self._sessions() as session, session.begin():
             insert = sqlite_insert if session.get_bind().dialect.name == "sqlite" else pg_insert

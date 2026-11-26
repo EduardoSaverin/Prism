@@ -1,4 +1,4 @@
-"""Single-process budget enforcement and periodic spend increments."""
+"""Shared hard-budget admission and retryable spend settlement."""
 
 from __future__ import annotations
 
@@ -75,6 +75,8 @@ class BudgetBatch:
 class BudgetStore(Protocol):
     async def load(self) -> list[tuple[Budget, BudgetSpend]]: ...
 
+    async def exhausted(self, ids: list[str], now: datetime) -> tuple[str, datetime] | None: ...
+
     async def save(self, batch: BudgetBatch) -> None: ...
 
 
@@ -83,7 +85,7 @@ def _utcnow() -> datetime:
 
 
 class BudgetTracker:
-    """Checks and charges budgets on the gateway's event loop without database I/O."""
+    """Check shared hard limits and persist completed charges."""
 
     def __init__(self, store: BudgetStore, *, now: Now = _utcnow, flush_interval_s: float = 5):
         self._store = store
@@ -93,6 +95,7 @@ class BudgetTracker:
         self._spend: dict[str, BudgetSpend] = {}
         self._pending: dict[tuple[str, datetime], Decimal] = {}
         self._retry: BudgetBatch | None = None
+        self._flush_lock = asyncio.Lock()
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
 
@@ -114,9 +117,44 @@ class BudgetTracker:
             self._task = None
             await self._flush()
 
-    def check(self, ctx: RequestContext) -> None:
+    async def admit(self, ctx: RequestContext) -> None:
+        budgets = self._applicable(ctx)
         now = self._now()
-        for budget in self._applicable(ctx):
+        self._check_local(budgets, now)
+        ids = [budget.id for budget in budgets if budget.mode is BudgetMode.HARD]
+        if not ids:
+            return
+        try:
+            exhausted = await self._store.exhausted(ids, now)
+        except Exception as exc:
+            log.exception("Could not check shared budget spend")
+            raise PrismError(ErrorKind.BUDGET_UNAVAILABLE, "Budget check unavailable.") from exc
+        if exhausted is not None:
+            scope, reset_at = exhausted
+            raise PrismError(
+                ErrorKind.BUDGET_EXCEEDED,
+                f"The {scope} budget has been reached.",
+                retry_after_s=(reset_at - now).total_seconds(),
+            )
+
+    async def settle(self, ctx: RequestContext) -> int | None:
+        if not ctx.cost_usd:
+            return None
+        budgets = self._applicable(ctx)
+        threshold = self._charge_local(budgets, ctx.cost_usd)
+        if budgets:
+            try:
+                async with self._flush_lock:
+                    await self._write_pending()
+            except Exception as exc:
+                log.exception("Could not settle budget spend; retained for retry")
+                raise PrismError(
+                    ErrorKind.BUDGET_UNAVAILABLE, "Budget settlement unavailable."
+                ) from exc
+        return threshold
+
+    def _check_local(self, budgets: list[Budget], now: datetime) -> None:
+        for budget in budgets:
             spend = self._current_spend(budget, now)
             if budget.mode is BudgetMode.HARD and spend.spent_usd >= budget.limit_usd:
                 # TODO: Consider an opt-in route fallback restricted to explicitly zero-priced
@@ -127,18 +165,17 @@ class BudgetTracker:
                     retry_after_s=(spend.reset_at - now).total_seconds(),
                 )
 
-    def charge(self, ctx: RequestContext) -> int | None:
-        """Charge the final cost and return the highest soft threshold crossed."""
-        if ctx.cost_usd is None or ctx.cost_usd <= 0:
+    def _charge_local(self, budgets: list[Budget], cost: Decimal) -> int | None:
+        if cost <= 0:
             return None
         now = self._now()
         threshold: int | None = None
-        for budget in self._applicable(ctx):
+        for budget in budgets:
             previous = self._current_spend(budget, now)
-            spent = previous.spent_usd + ctx.cost_usd
+            spent = previous.spent_usd + cost
             self._spend[budget.id] = BudgetSpend(budget.id, previous.reset_at, spent)
             key = (budget.id, previous.reset_at)
-            self._pending[key] = self._pending.get(key, Decimal(0)) + ctx.cost_usd
+            self._pending[key] = self._pending.get(key, Decimal(0)) + cost
             if budget.mode is BudgetMode.SOFT:
                 for percent in (80, 100):
                     limit = budget.limit_usd * percent / 100
@@ -175,6 +212,10 @@ class BudgetTracker:
         for budgets in self._budgets.values():
             for budget in budgets:
                 self._current_spend(budget, now)
+        async with self._flush_lock:
+            await self._write_pending()
+
+    async def _write_pending(self) -> None:
         # Keep an unacknowledged batch immutable. Charges arriving during its write
         # accumulate separately, even if the database committed before a disconnect.
         if self._retry is not None:
